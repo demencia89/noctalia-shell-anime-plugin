@@ -1,0 +1,200 @@
+import QtQuick
+import QtQuick.Layouts
+import qs.Commons
+import qs.Widgets
+import "components"
+
+Item {
+    id: root
+
+    property var pluginApi: null
+
+    // ── SmartPanel contract ───────────────────────────────────────────────────
+    readonly property var geometryPlaceholder: panelContainer
+    readonly property bool allowAttach: true
+
+    readonly property real screenWidth: pluginApi?.panelOpenScreen?.geometry?.width ?? 1920
+    readonly property var panelWidthMap: ({ "small": 0.25, "medium": 0.5, "large": 0.75 })
+    
+    property real contentPreferredWidth: 
+        screenWidth * (panelWidthMap[anime?.panelSize || "medium"])
+    property real contentPreferredHeight: 820 * Style.uiScaleRatio
+
+    anchors.fill: parent
+
+    readonly property var anime: pluginApi?.mainInstance || null
+
+    // ── Tab / navigation state ────────────────────────────────────────────────
+    property int tabIndex:    1
+    property int browseStack: 0
+    property int libraryStack: 0
+    property bool settingsOpen: false
+
+    Rectangle {
+        id: panelContainer
+        anchors.fill: parent
+        color: "transparent"
+        radius: Style.radiusL
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 0
+
+            // ── Main content ─────────────────────────────────────────────────
+            StackLayout {
+                Layout.fillWidth:  true
+                Layout.fillHeight: true
+                currentIndex: root.settingsOpen ? 2 : root.tabIndex
+
+                // Browse tab
+                Item {
+                    BrowseView {
+                        anchors.fill: parent
+                        pluginApi: root.pluginApi
+                        visible:  root.browseStack === 0
+                        opacity:  visible ? 1 : 0
+                        Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+
+                        onAnimeSelected: function(show) {
+                            if (root.anime) root.anime.fetchAnimeDetail(show)
+                            root.browseStack = 1
+                        }
+                    }
+
+                    DetailView {
+                        anchors.fill: parent
+                        pluginApi: root.pluginApi
+                        visible:  root.browseStack === 1
+                        opacity:  visible ? 1 : 0
+                        Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+
+                        onBackRequested: {
+                            root.browseStack = 0
+                            if (root.anime) root.anime.clearDetail()
+                        }
+                    }
+                }
+
+                // Library tab
+                Item {
+                    LibraryView {
+                        anchors.fill: parent
+                        pluginApi: root.pluginApi
+                        visible:  root.libraryStack === 0
+                        opacity:  visible ? 1 : 0
+                        Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+
+                        onAnimeSelected: function(show) {
+                            if (root.anime) root.anime.fetchAnimeDetail(show)
+                            root.libraryStack = 1
+                        }
+                    }
+
+                    DetailView {
+                        anchors.fill: parent
+                        pluginApi: root.pluginApi
+                        visible:  root.libraryStack === 1
+                        opacity:  visible ? 1 : 0
+                        Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+
+                        onBackRequested: {
+                            root.libraryStack = 0
+                            if (root.anime) root.anime.clearDetail()
+                        }
+                    }
+                }
+
+                // Settings tab
+                SettingsView {
+                    pluginApi: root.pluginApi
+                    onBackRequested: root.settingsOpen = false
+                }
+            }
+
+            // ── Bottom tab bar ────────────────────────────────────────────────
+            Rectangle {
+                Layout.fillWidth: true
+                height: 48
+                color: "transparent"
+
+                // Top hairline
+                Rectangle {
+                    anchors { top: parent.top; left: parent.left; right: parent.right }
+                    height: 1; color: Color.mOutlineVariant; opacity: 0.4
+                }
+
+                Row {
+                    anchors.fill: parent
+
+                    Repeater {
+                        model: [
+                            { label: "Browse",   icon: "⊞" },
+                            { label: "Library",  icon: "⊟" },
+                            { label: "Settings", icon: "⚙" }
+                        ]
+
+                        delegate: Item {
+                            width:  panelContainer.width / 3
+                            height: parent.height
+
+                            readonly property bool active: root.settingsOpen ? index === 2 : (!root.settingsOpen && root.tabIndex === index)
+
+                            Rectangle {
+                                anchors.fill: parent
+                                color: tabArea.containsMouse && !active
+                                    ? Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.05)
+                                    : "transparent"
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                            }
+
+                            Column {
+                                anchors.centerIn: parent
+                                spacing: 2
+
+                                Text {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    text: modelData.icon
+                                    font.pixelSize: 13
+                                    color: active ? Color.mPrimary : Color.mOnSurfaceVariant
+                                    opacity: active ? 1 : 0.5
+                                    Behavior on color { ColorAnimation { duration: 180 } }
+                                }
+                                Text {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    text: modelData.label
+                                    font.pixelSize: 10
+                                    font.letterSpacing: 0.6
+                                    color: active ? Color.mPrimary : Color.mOnSurfaceVariant
+                                    opacity: active ? 1 : 0.5
+                                    Behavior on color { ColorAnimation { duration: 180 } }
+                                }
+                            }
+
+                            Rectangle {
+                                anchors { top: parent.top; horizontalCenter: parent.horizontalCenter }
+                                width:  active ? 28 : 0
+                                height: 2; radius: 1
+                                color: Color.mPrimary
+                                Behavior on width { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+                            }
+
+                            MouseArea {
+                                id: tabArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                onClicked: {
+                                    if (index === 2) {
+                                        root.settingsOpen = true
+                                    } else {
+                                        root.settingsOpen = false
+                                        root.tabIndex = index
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

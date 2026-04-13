@@ -1,0 +1,27 @@
+{
+  "id": "anime",
+  "name": "Anime",
+  "version": "1.0.0",
+  "minNoctaliaVersion": "3.6.0",
+  "author": "you",
+  "license": "MIT",
+  "repository": "",
+  "description": "Browse and track anime from a Noctalia side panel using AllAnime, with mpv playback and progress tracking.",
+  "tags": [
+    "Panel",
+    "Entertainment"
+  ],
+  "entryPoints": {
+    "main": "Main.qml",
+    "barWidget": "BarWidget.qml",
+    "panel": "Panel.qml"
+  },
+  "dependencies": {
+    "plugins": []
+  },
+  "metadata": {
+    "defaultSettings": {
+      "mode": "sub"
+    }
+  }
+}
