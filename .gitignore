@@ -1,4 +1,5 @@
 .aider*
+.codex
 settings.json
 progress/
 __pycache__/
