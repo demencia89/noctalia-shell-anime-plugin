@@ -56,6 +56,8 @@ Item {
     property string currentView:     "popular"
     property string currentCountry:  "ALL"
     property string currentSearchQuery: ""
+    property string currentGenre:    ""
+    property var    genresList:      []
     property int    _page:           1
     property bool   _hasMore:        true
 
@@ -85,6 +87,7 @@ Item {
     Component.onCompleted: {
         _loadLibrary()
         _ensureProgressDir()
+        fetchGenres()
         fetchPopular(true)
     }
 
@@ -372,6 +375,22 @@ Item {
 
     // ── Browse processes ──────────────────────────────────────────────────────
     Process {
+        id: genreProc
+        property string _buf: ""
+        onRunningChanged: {
+            if (running) return
+            if (_buf.length === 0) return
+            try {
+                root.genresList = JSON.parse(_buf)
+            } catch(e) { Logger.w("Anime", "genres parse error:", e) }
+            _buf = ""
+        }
+        stdout: SplitParser {
+            onRead: function(data) { genreProc._buf += data }
+        }
+    }
+
+    Process {
         id: browseProc
         property string _buf:   ""
         property bool   _reset: true
@@ -478,22 +497,46 @@ Item {
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
+    function fetchGenres() {
+        genreProc._buf = ""
+        genreProc.command = ["python3", scriptPath, "genres"]
+        genreProc.running = true
+    }
+
+    function setGenre(genre) {
+        if (currentGenre === genre) return
+        currentGenre = genre
+        if (currentView === "search" && currentSearchQuery.length > 0)
+            searchAnime(currentSearchQuery, true)
+        else
+            fetchPopular(true)
+    }
+
     function fetchPopular(reset) {
         if (reset) { _page = 1; _hasMore = true }
         if (!_hasMore || isFetchingAnime) return
         currentView = "popular"
         currentSearchQuery = ""
-        _runBrowse(["popular", String(_page), currentMode], reset || _page === 1)
+        var args = ["popular", String(_page), currentMode]
+        if (currentGenre) args.push(currentGenre)
+        _runBrowse(args, reset || _page === 1)
     }
 
-    function fetchNextPage() { fetchPopular(false) }
+    function fetchNextPage() {
+        if (currentView === "search")
+            searchAnime(currentSearchQuery, false)
+        else
+            fetchPopular(false)
+    }
 
     function searchAnime(query, reset) {
         if (reset) { _page = 1; _hasMore = true }
         if (isFetchingAnime) return
         currentView = "search"
         currentSearchQuery = query
-        _runBrowse(["search", query, currentMode, String(_page)], reset || _page === 1)
+        var args = ["search", query, currentMode, String(_page)]
+        if (currentGenre) args.push(currentGenre)
+        _runBrowse(args, reset || _page === 1)
     }
 
     function fetchAnimeDetail(show) {

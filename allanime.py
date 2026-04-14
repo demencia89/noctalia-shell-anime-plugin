@@ -32,6 +32,12 @@ _Q_EPISODES = "query($showId:String!){show(_id:$showId){_id description thumbnai
 
 _Q_STREAM = "query($showId:String! $translationType:VaildTranslationTypeEnumType! $episodeString:String!){episode(showId:$showId translationType:$translationType episodeString:$episodeString){episodeString sourceUrls}}"
 
+_GENRES = [
+    "Action", "Adventure", "Comedy", "Drama", "Ecchi", "Fantasy", "Horror", 
+    "Mahou Shoujo", "Mecha", "Music", "Mystery", "Psychological", "Romance", 
+    "Sci-Fi", "Slice of Life", "Sports", "Supernatural", "Thriller"
+]
+
 # ── Hex-decode table (from ani-cli provider_init) ─────────────────────────────
 _HEX = {
     "79":"A","7a":"B","7b":"C","7c":"D","7d":"E","7e":"F","7f":"G","70":"H",
@@ -105,15 +111,23 @@ def _shows(search_obj, page, mode, country="ALL"):
     print(json.dumps({"results": results, "hasNextPage": len(results) == 40}))
 
 # ── Commands ──────────────────────────────────────────────────────────────────
-def cmd_popular(page=1, mode="sub"):
-    # Empty query = trending/popular on AllAnime
-    _shows({"allowAdult": False, "allowUnknown": False}, page, mode)
+def cmd_popular(page=1, mode="sub", genre=None):
+    search = {"allowAdult": False, "allowUnknown": False}
+    if genre:
+        search["genres"] = [genre]
+    _shows(search, page, mode)
 
 def cmd_latest(page=1, mode="sub", country="ALL"):
     _shows({"allowAdult": False, "allowUnknown": False, "sortBy": "latest"}, page, mode, country)
 
-def cmd_search(query, mode="sub", page=1):
-    _shows({"allowAdult": False, "allowUnknown": False, "query": query}, page, mode)
+def cmd_search(query, mode="sub", page=1, genre=None):
+    search = {"allowAdult": False, "allowUnknown": False, "query": query}
+    if genre:
+        search["genres"] = [genre]
+    _shows(search, page, mode)
+
+def cmd_genres():
+    print(json.dumps(_GENRES))
 
 def cmd_episodes(show_id, mode="sub"):
     data = _gql({"showId": show_id}, _Q_EPISODES)
@@ -231,11 +245,13 @@ def main():
                 args[1] if len(args) > 1 else "",
                 args[2] if len(args) > 2 else "sub",
                 int(args[3]) if len(args) > 3 else 1,
+                args[4] if len(args) > 4 else None
             )
         elif cmd == "popular":
             cmd_popular(
                 int(args[1]) if len(args) > 1 else 1,
                 args[2] if len(args) > 2 else "sub",
+                args[3] if len(args) > 3 else None
             )
         elif cmd == "latest":
             cmd_latest(
@@ -243,6 +259,8 @@ def main():
                 args[2] if len(args) > 2 else "sub",
                 args[3] if len(args) > 3 else "ALL",
             )
+        elif cmd == "genres":
+            cmd_genres()
         elif cmd == "episodes":
             cmd_episodes(
                 args[1],

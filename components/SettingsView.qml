@@ -41,6 +41,19 @@ Item {
         }
     }
 
+    Rectangle {
+        anchors.fill: parent
+        color: "transparent"
+    }
+
+    Rectangle {
+        anchors.fill: parent
+        gradient: Gradient {
+            GradientStop { position: 0.0; color: Qt.rgba(Color.mSurfaceVariant.r, Color.mSurfaceVariant.g, Color.mSurfaceVariant.b, 0.08) }
+            GradientStop { position: 1.0; color: Qt.rgba(Color.mSurface.r, Color.mSurface.g, Color.mSurface.b, 0.12) }
+        }
+    }
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
@@ -49,7 +62,7 @@ Item {
         Rectangle {
             Layout.fillWidth: true
             height: 68
-            color: Color.mSurfaceVariant
+            color: "transparent"
             z: 2
 
             Rectangle {

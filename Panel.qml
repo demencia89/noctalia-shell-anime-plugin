@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Qt5Compat.GraphicalEffects
 import qs.Commons
 import qs.Widgets
 import "components"
@@ -112,10 +113,30 @@ Item {
                     }
                 }
 
+                ShaderEffectSource {
+                    id: blurredContentSource
+                    anchors.fill: contentStack
+                    sourceItem: contentStack
+                    live: true
+                    recursive: true
+                    visible: root.settingsOpen
+                    hideSource: false
+                }
+
+                FastBlur {
+                    anchors.fill: contentStack
+                    source: blurredContentSource
+                    radius: 56
+                    transparentBorder: true
+                    visible: root.settingsOpen
+                    opacity: root.settingsOpen ? 1 : 0
+                    Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                }
+
                 Rectangle {
                     anchors.fill: contentStack
                     visible: root.settingsOpen
-                    color: Qt.rgba(Color.mSurface.r, Color.mSurface.g, Color.mSurface.b, 0.42)
+                    color: Qt.rgba(Color.mSurface.r, Color.mSurface.g, Color.mSurface.b, 0.56)
                     opacity: root.settingsOpen ? 1 : 0
                     Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
                 }

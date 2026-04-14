@@ -226,7 +226,7 @@ Item {
                 Rectangle {
                     id: libCard
                     anchors { fill: parent; margins: 5 }
-                    radius: 14; color: Qt.rgba(Color.mSurfaceVariant.r, Color.mSurfaceVariant.g, Color.mSurfaceVariant.b, 0.45)
+                    radius: 10; color: Qt.rgba(Color.mSurfaceVariant.r, Color.mSurfaceVariant.g, Color.mSurfaceVariant.b, 0.45)
                     clip: true
 
                     // Cover
@@ -234,7 +234,7 @@ Item {
                         id: libImageWrapper
                         anchors { top: parent.top; left: parent.left; right: parent.right }
                         height: parent.height - libTitleBar.height - libEpBar.height
-                        radius: 14
+                        radius: 10
                         color: "transparent"
                         clip: true
                         layer.enabled: true

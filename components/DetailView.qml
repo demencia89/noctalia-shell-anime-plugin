@@ -107,7 +107,7 @@ Item {
         // ── Episode count / last watched sub-bar ──────────────────────────────
         Rectangle {
             Layout.fillWidth: true; height: 34
-            color: Color.mSurface
+            color: "transparent"
             visible: anime?.currentAnime != null
 
             RowLayout {
@@ -176,9 +176,9 @@ Item {
                 anchors.fill: parent
                 gradient: Gradient {
                     orientation: Gradient.Horizontal
-                    GradientStop { position: 0.0; color: Qt.rgba(Color.mSurface.r, Color.mSurface.g, Color.mSurface.b, 0.0) }
-                    GradientStop { position: 0.5; color: Qt.rgba(Color.mSurfaceVariant.r, Color.mSurfaceVariant.g, Color.mSurfaceVariant.b, 0.38) }
-                    GradientStop { position: 1.0; color: Color.mSurface }
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.5; color: Qt.rgba(Color.mSurfaceVariant.r, Color.mSurfaceVariant.g, Color.mSurfaceVariant.b, 0.22) }
+                    GradientStop { position: 1.0; color: Qt.rgba(Color.mSurface.r, Color.mSurface.g, Color.mSurface.b, 0.35) }
                 }
             }
 

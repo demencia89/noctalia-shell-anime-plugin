@@ -420,7 +420,7 @@ Item {
                     Rectangle {
                         id: card
                         anchors { fill: parent; margins: 5 }
-                        radius: 14; color: Qt.rgba(Color.mSurfaceVariant.r, Color.mSurfaceVariant.g, Color.mSurfaceVariant.b, 0.45)
+                        radius: 10; color: Qt.rgba(Color.mSurfaceVariant.r, Color.mSurfaceVariant.g, Color.mSurfaceVariant.b, 0.45)
                         clip: true
 
                         // Title bar (defined before wrapper so it can be referenced if needed)
@@ -449,7 +449,7 @@ Item {
                         Rectangle {
                             id: posterWrapper
                             anchors { top: parent.top; left: parent.left; right: parent.right; bottom: titleBar.top }
-                            radius: 14; clip: true; color: "transparent"
+                            radius: 10; clip: true; color: "transparent"
                             layer.enabled: true
                             layer.effect: OpacityMask {
                                 maskSource: Rectangle {
