@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import Qt5Compat.GraphicalEffects
 import qs.Commons
 import qs.Widgets
 
@@ -11,6 +12,7 @@ Item {
     readonly property var anime: pluginApi?.mainInstance || null
 
     signal animeSelected(var show)
+    signal settingsRequested()
 
     // ── Background ────────────────────────────────────────────────────────────
     ColumnLayout {
@@ -21,7 +23,7 @@ Item {
         Rectangle {
             Layout.fillWidth: true
             height: 56
-            color: Color.mSurfaceVariant
+            color: "transparent"
             z: 2
 
             Rectangle {
@@ -206,6 +208,118 @@ Item {
                         }
                     }
                 }
+
+                Item {
+                    width: 38; height: 38
+
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: 32; height: 32; radius: 16
+                        color: settingsArea.containsMouse
+                            ? Color.mPrimaryContainer
+                            : "transparent"
+                        border.width: settingsArea.containsMouse ? 1 : 0
+                        border.color: Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.25)
+                        Behavior on color { ColorAnimation { duration: 180 } }
+                    }
+                    Text {
+                        anchors.centerIn: parent
+                        text: "⚙"
+                        font.pixelSize: 15
+                        color: settingsArea.containsMouse
+                            ? Color.mOnPrimaryContainer
+                            : Color.mOnSurfaceVariant
+                        Behavior on color { ColorAnimation { duration: 180 } }
+                    }
+                    MouseArea {
+                        id: settingsArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: browseView.settingsRequested()
+                    }
+                }
+            }
+        }
+
+        // ── Genre selector ────────────────────────────────────────────────────
+        Rectangle {
+            Layout.fillWidth: true
+            height: (anime?.genresList?.length ?? 0) > 0 ? 56 : 0
+            color: "transparent"
+            visible: height > 0
+            clip: true
+
+            ListView {
+                id: genreList
+                anchors.fill: parent
+                orientation: ListView.Horizontal
+                spacing: 8
+                leftMargin: 18; rightMargin: 18
+                model: ["All"].concat(anime?.genresList || [])
+                boundsBehavior: Flickable.StopAtBounds
+                flickableDirection: Flickable.HorizontalFlick
+
+                delegate: Item {
+                    width: genreLabel.implicitWidth + 28
+                    height: 32
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    readonly property bool active: (modelData === "All" && (anime?.currentGenre ?? "") === "") ||
+                                                   (anime?.currentGenre === modelData)
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 16
+                        color: active ? Color.mPrimary : Color.mSurfaceVariant
+                        border.color: active ? Color.mPrimary : Color.mOutlineVariant
+                        border.width: 1
+                        Behavior on color { ColorAnimation { duration: 160 } }
+                    }
+
+                    Text {
+                        id: genreLabel
+                        anchors.centerIn: parent
+                        text: modelData
+                        font.pixelSize: 11; font.bold: active
+                        color: active ? Color.mOnPrimary : Color.mOnSurfaceVariant
+                        Behavior on color { ColorAnimation { duration: 160 } }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: {
+                            if (anime) {
+                                anime.setGenre(modelData === "All" ? "" : modelData)
+                            }
+                        }
+                    }
+                }
+
+                ScrollBar.horizontal: ScrollBar {
+                    policy: ScrollBar.AlwaysOff
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    acceptedButtons: Qt.NoButton
+                    onWheel: (wheel) => {
+                        genreList.flick(wheel.angleDelta.y * 5, 0)
+                    }
+                }
+            }
+            
+            // Subtle gradient on right to indicate more items
+            Rectangle {
+                anchors { right: parent.right; top: parent.top; bottom: parent.bottom }
+                width: 32
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 1.0; color: Color.mSurface }
+                }
+                opacity: genreList.atEnd ? 0 : 0.8
+                Behavior on opacity { NumberAnimation { duration: 200 } }
             }
         }
 
@@ -306,103 +420,10 @@ Item {
                     Rectangle {
                         id: card
                         anchors { fill: parent; margins: 5 }
-                        radius: 10; color: Color.mSurfaceVariant; clip: true
+                        radius: 14; color: Qt.rgba(Color.mSurfaceVariant.r, Color.mSurfaceVariant.g, Color.mSurfaceVariant.b, 0.45)
+                        clip: true
 
-                        // Cover
-                        Image {
-                            id: coverImg
-                            anchors { top: parent.top; left: parent.left; right: parent.right }
-                            height: parent.height - titleBar.height
-                            source: modelData.thumbnail || ""
-                            fillMode: Image.PreserveAspectCrop
-                            asynchronous: true; cache: true
-                            opacity: status === Image.Ready ? 1 : 0
-                            Behavior on opacity { NumberAnimation { duration: 300 } }
-
-                            Rectangle {
-                                anchors.fill: parent; color: Color.mSurfaceVariant
-                                visible: coverImg.status !== Image.Ready
-                                Text {
-                                    anchors.centerIn: parent; text: "◫"
-                                    font.pixelSize: 28; color: Color.mOutline; opacity: 0.25
-                                }
-                            }
-
-                            // Score badge
-                            Rectangle {
-                                visible: modelData.score != null
-                                anchors { top: parent.top; left: parent.left; topMargin: 6; leftMargin: 6 }
-                                height: 18; radius: 9
-                                width: scoreText.implicitWidth + 10
-                                color: Qt.rgba(Color.mSurface.r, Color.mSurface.g, Color.mSurface.b, 0.88)
-                                border.width: 1
-                                border.color: Qt.rgba(Color.mOutlineVariant.r, Color.mOutlineVariant.g, Color.mOutlineVariant.b, 0.38)
-
-                                Text {
-                                    id: scoreText; anchors.centerIn: parent
-                                    text: modelData.score != null ? "★ " + (modelData.score || 0).toFixed(1) : ""
-                                    font.pixelSize: 8; font.bold: true; font.letterSpacing: 0.5
-                                    color: Color.mPrimary
-                                }
-                            }
-
-                            // Type badge
-                            Rectangle {
-                                visible: (modelData.type || "").length > 0
-                                anchors { top: parent.top; right: parent.right; topMargin: 6; rightMargin: 6 }
-                                height: 18; radius: 9
-                                width: typeText.implicitWidth + 10
-                                color: Qt.rgba(Color.mSurface.r, Color.mSurface.g, Color.mSurface.b, 0.86)
-                                border.width: 1
-                                border.color: Qt.rgba(Color.mOutlineVariant.r, Color.mOutlineVariant.g, Color.mOutlineVariant.b, 0.36)
-
-                                Text {
-                                    id: typeText; anchors.centerIn: parent
-                                    text: (modelData.type || "").toUpperCase()
-                                    font.pixelSize: 8; font.letterSpacing: 1; font.bold: true
-                                    color: Color.mPrimary
-                                }
-                            }
-
-                            // Episode count badge
-                            Rectangle {
-                                visible: modelData.availableEpisodes &&
-                                    ((modelData.availableEpisodes.sub > 0) ||
-                                     (modelData.availableEpisodes.dub > 0))
-                                anchors {
-                                    bottom: parent.bottom; right: parent.right
-                                    bottomMargin: 6; rightMargin: 6
-                                }
-                                height: 18; radius: 9
-                                width: epText.implicitWidth + 10
-                                color: Qt.rgba(Color.mSurface.r, Color.mSurface.g, Color.mSurface.b, 0.88)
-                                border.width: 1
-                                border.color: Qt.rgba(Color.mOutlineVariant.r, Color.mOutlineVariant.g, Color.mOutlineVariant.b, 0.38)
-
-                                Text {
-                                    id: epText; anchors.centerIn: parent
-                                    text: {
-                                        var avail = modelData.availableEpisodes
-                                        var n = (anime?.currentMode === "dub") ? avail.dub : avail.sub
-                                        return n + " ep"
-                                    }
-                                    font.pixelSize: 8; font.letterSpacing: 0.5
-                                    color: Color.mOnSurface
-                                }
-                            }
-
-                            // Gradient
-                            Rectangle {
-                                anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
-                                height: 40
-                                gradient: Gradient {
-                                    GradientStop { position: 0.0; color: "transparent" }
-                                    GradientStop { position: 1.0; color: Color.mSurfaceVariant }
-                                }
-                            }
-                        }
-
-                        // Title bar
+                        // Title bar (defined before wrapper so it can be referenced if needed)
                         Rectangle {
                             id: titleBar
                             anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
@@ -421,6 +442,113 @@ Item {
                                 color: Color.mOnSurface
                                 wrapMode: Text.Wrap; maximumLineCount: 2
                                 elide: Text.ElideRight; lineHeight: 1.3
+                            }
+                        }
+
+                        // Poster Wrapper
+                        Rectangle {
+                            id: posterWrapper
+                            anchors { top: parent.top; left: parent.left; right: parent.right; bottom: titleBar.top }
+                            radius: 14; clip: true; color: "transparent"
+                            layer.enabled: true
+                            layer.effect: OpacityMask {
+                                maskSource: Rectangle {
+                                    width: posterWrapper.width
+                                    height: posterWrapper.height
+                                    radius: posterWrapper.radius
+                                }
+                            }
+
+                            Image {
+                                id: coverImg
+                                anchors.fill: parent
+                                source: modelData.thumbnail || ""
+                                fillMode: Image.PreserveAspectCrop
+                                asynchronous: true; cache: true
+                                opacity: status === Image.Ready ? 1 : 0
+                                Behavior on opacity { NumberAnimation { duration: 300 } }
+
+                                Rectangle {
+                                    anchors.fill: parent; color: Color.mSurfaceVariant
+                                    visible: coverImg.status !== Image.Ready
+                                    Text {
+                                        anchors.centerIn: parent; text: "◫"
+                                        font.pixelSize: 28; color: Color.mOutline; opacity: 0.25
+                                    }
+                                }
+
+                                // Score badge
+                                Rectangle {
+                                    visible: modelData.score != null
+                                    anchors { top: parent.top; left: parent.left; topMargin: 6; leftMargin: 6 }
+                                    height: 18; radius: 9
+                                    width: scoreText.implicitWidth + 10
+                                    color: Qt.rgba(Color.mSurface.r, Color.mSurface.g, Color.mSurface.b, 0.88)
+                                    border.width: 1
+                                    border.color: Qt.rgba(Color.mOutlineVariant.r, Color.mOutlineVariant.g, Color.mOutlineVariant.b, 0.38)
+
+                                    Text {
+                                        id: scoreText; anchors.centerIn: parent
+                                        text: modelData.score != null ? "★ " + (modelData.score || 0).toFixed(1) : ""
+                                        font.pixelSize: 8; font.bold: true; font.letterSpacing: 0.5
+                                        color: Color.mPrimary
+                                    }
+                                }
+
+                                // Type badge
+                                Rectangle {
+                                    visible: (modelData.type || "").length > 0
+                                    anchors { top: parent.top; right: parent.right; topMargin: 6; rightMargin: 6 }
+                                    height: 18; radius: 9
+                                    width: typeText.implicitWidth + 10
+                                    color: Qt.rgba(Color.mSurface.r, Color.mSurface.g, Color.mSurface.b, 0.86)
+                                    border.width: 1
+                                    border.color: Qt.rgba(Color.mOutlineVariant.r, Color.mOutlineVariant.g, Color.mOutlineVariant.b, 0.36)
+
+                                    Text {
+                                        id: typeText; anchors.centerIn: parent
+                                        text: (modelData.type || "").toUpperCase()
+                                        font.pixelSize: 8; font.letterSpacing: 1; font.bold: true
+                                        color: Color.mPrimary
+                                    }
+                                }
+
+                                // Episode count badge
+                                Rectangle {
+                                    visible: modelData.availableEpisodes &&
+                                        ((modelData.availableEpisodes.sub > 0) ||
+                                         (modelData.availableEpisodes.dub > 0))
+                                    anchors {
+                                        bottom: parent.bottom; right: parent.right
+                                        bottomMargin: 6; rightMargin: 6
+                                    }
+                                    height: 18; radius: 9
+                                    width: epText.implicitWidth + 10
+                                    color: Qt.rgba(Color.mSurface.r, Color.mSurface.g, Color.mSurface.b, 0.88)
+                                    border.width: 1
+                                    border.color: Qt.rgba(Color.mOutlineVariant.r, Color.mOutlineVariant.g, Color.mOutlineVariant.b, 0.38)
+
+                                    Text {
+                                        id: epText; anchors.centerIn: parent
+                                        text: {
+                                            var avail = modelData.availableEpisodes
+                                            var n = (anime?.currentMode === "dub") ? avail.dub : avail.sub
+                                            return n + " ep"
+                                        }
+                                        font.pixelSize: 8; font.letterSpacing: 0.5
+                                        color: Color.mOnSurface
+                                    }
+                                }
+
+                                // Gradient
+                                Rectangle {
+                                    anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
+                                    height: 40
+                                    gradient: Gradient {
+                                        GradientStop { position: 0.0; color: "transparent" }
+                                        GradientStop { position: 1.0; color: Color.mSurfaceVariant }
+                                    }
+                                }
                             }
                         }
 

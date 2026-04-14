@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import Qt5Compat.GraphicalEffects
 import qs.Commons
 import qs.Widgets
 
@@ -11,6 +12,7 @@ Item {
     readonly property var anime: pluginApi?.mainInstance || null
 
     signal animeSelected(var show)
+    signal settingsRequested()
 
     ColumnLayout {
         anchors.fill: parent
@@ -20,7 +22,7 @@ Item {
         Rectangle {
             Layout.fillWidth: true
             height: 56
-            color: Color.mSurfaceVariant
+            color: "transparent"
             z: 2
 
             Rectangle {
@@ -79,6 +81,37 @@ Item {
                         font.pixelSize: 10
                         font.letterSpacing: 0.5
                         color: Color.mOnSurfaceVariant
+                    }
+                }
+
+                Item {
+                    width: 38; height: 38
+
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: 32; height: 32; radius: 16
+                        color: settingsArea.containsMouse
+                            ? Color.mPrimaryContainer
+                            : "transparent"
+                        border.width: settingsArea.containsMouse ? 1 : 0
+                        border.color: Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.25)
+                        Behavior on color { ColorAnimation { duration: 180 } }
+                    }
+                    Text {
+                        anchors.centerIn: parent
+                        text: "⚙"
+                        font.pixelSize: 15
+                        color: settingsArea.containsMouse
+                            ? Color.mOnPrimaryContainer
+                            : Color.mOnSurfaceVariant
+                        Behavior on color { ColorAnimation { duration: 180 } }
+                    }
+                    MouseArea {
+                        id: settingsArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: libraryView.settingsRequested()
                     }
                 }
             }
@@ -193,52 +226,69 @@ Item {
                 Rectangle {
                     id: libCard
                     anchors { fill: parent; margins: 5 }
-                    radius: 10; color: Color.mSurfaceVariant; clip: true
+                    radius: 14; color: Qt.rgba(Color.mSurfaceVariant.r, Color.mSurfaceVariant.g, Color.mSurfaceVariant.b, 0.45)
+                    clip: true
 
                     // Cover
-                    Image {
-                        id: libCover
+                    Rectangle {
+                        id: libImageWrapper
                         anchors { top: parent.top; left: parent.left; right: parent.right }
                         height: parent.height - libTitleBar.height - libEpBar.height
-                        source: entry.thumbnail || ""
-                        fillMode: Image.PreserveAspectCrop
-                        asynchronous: true; cache: true
-                        opacity: status === Image.Ready ? 1 : 0
-                        Behavior on opacity { NumberAnimation { duration: 300 } }
-
-                        Rectangle {
-                            anchors.fill: parent; color: Color.mSurfaceVariant
-                            visible: libCover.status !== Image.Ready
-                            Text {
-                                anchors.centerIn: parent; text: "◫"
-                                font.pixelSize: 28; color: Color.mOutline; opacity: 0.25
+                        radius: 14
+                        color: "transparent"
+                        clip: true
+                        layer.enabled: true
+                        layer.effect: OpacityMask {
+                            maskSource: Rectangle {
+                                width: libImageWrapper.width
+                                height: libImageWrapper.height
+                                radius: libImageWrapper.radius
                             }
                         }
 
-                        // Score badge
-                        Rectangle {
-                            visible: entry.score != null
-                            anchors { top: parent.top; left: parent.left; topMargin: 6; leftMargin: 6 }
-                            height: 18; radius: 9; width: libScoreText.implicitWidth + 10
-                            color: Qt.rgba(Color.mSurface.r, Color.mSurface.g, Color.mSurface.b, 0.88)
-                            border.width: 1
-                            border.color: Qt.rgba(Color.mOutlineVariant.r, Color.mOutlineVariant.g, Color.mOutlineVariant.b, 0.38)
+                        Image {
+                            id: libCover
+                            anchors.fill: parent
+                            source: entry.thumbnail || ""
+                            fillMode: Image.PreserveAspectCrop
+                            asynchronous: true; cache: true
+                            opacity: status === Image.Ready ? 1 : 0
+                            Behavior on opacity { NumberAnimation { duration: 300 } }
 
-                            Text {
-                                id: libScoreText; anchors.centerIn: parent
-                                text: entry.score ? "★ " + (entry.score).toFixed(1) : ""
-                                font.pixelSize: 8; font.bold: true
-                                color: Color.mPrimary
+                            Rectangle {
+                                anchors.fill: parent; color: Color.mSurfaceVariant
+                                visible: libCover.status !== Image.Ready
+                                Text {
+                                    anchors.centerIn: parent; text: "◫"
+                                    font.pixelSize: 28; color: Color.mOutline; opacity: 0.25
+                                }
                             }
-                        }
 
-                        // Gradient
-                        Rectangle {
-                            anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
-                            height: 40
-                            gradient: Gradient {
-                                GradientStop { position: 0.0; color: "transparent" }
-                                GradientStop { position: 1.0; color: Color.mSurfaceVariant }
+                            // Score badge
+                            Rectangle {
+                                visible: entry.score != null
+                                anchors { top: parent.top; left: parent.left; topMargin: 6; leftMargin: 6 }
+                                height: 18; radius: 9; width: libScoreText.implicitWidth + 10
+                                color: Qt.rgba(Color.mSurface.r, Color.mSurface.g, Color.mSurface.b, 0.88)
+                                border.width: 1
+                                border.color: Qt.rgba(Color.mOutlineVariant.r, Color.mOutlineVariant.g, Color.mOutlineVariant.b, 0.38)
+
+                                Text {
+                                    id: libScoreText; anchors.centerIn: parent
+                                    text: entry.score ? "★ " + (entry.score).toFixed(1) : ""
+                                    font.pixelSize: 8; font.bold: true
+                                    color: Color.mPrimary
+                                }
+                            }
+
+                            // Gradient
+                            Rectangle {
+                                anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
+                                height: 40
+                                gradient: Gradient {
+                                    GradientStop { position: 0.0; color: "transparent" }
+                                    GradientStop { position: 1.0; color: Color.mSurfaceVariant }
+                                }
                             }
                         }
                     }

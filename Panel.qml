@@ -41,73 +41,93 @@ Item {
             spacing: 0
 
             // ── Main content ─────────────────────────────────────────────────
-            StackLayout {
+            Item {
                 Layout.fillWidth:  true
                 Layout.fillHeight: true
-                currentIndex: root.settingsOpen ? 2 : root.tabIndex
+                StackLayout {
+                    id: contentStack
+                    anchors.fill: parent
+                    currentIndex: root.tabIndex
 
-                // Browse tab
-                Item {
-                    BrowseView {
-                        anchors.fill: parent
-                        pluginApi: root.pluginApi
-                        visible:  root.browseStack === 0
-                        opacity:  visible ? 1 : 0
-                        Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                    // Browse tab
+                    Item {
+                        BrowseView {
+                            anchors.fill: parent
+                            pluginApi: root.pluginApi
+                            visible:  root.browseStack === 0
+                            opacity:  visible ? 1 : 0
+                            Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
 
-                        onAnimeSelected: function(show) {
-                            if (root.anime) root.anime.fetchAnimeDetail(show)
-                            root.browseStack = 1
+                            onAnimeSelected: function(show) {
+                                if (root.anime) root.anime.fetchAnimeDetail(show)
+                                root.browseStack = 1
+                            }
+
+                            onSettingsRequested: root.settingsOpen = true
+                        }
+
+                        DetailView {
+                            anchors.fill: parent
+                            pluginApi: root.pluginApi
+                            visible:  root.browseStack === 1
+                            opacity:  visible ? 1 : 0
+                            Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+
+                            onBackRequested: {
+                                root.browseStack = 0
+                                if (root.anime) root.anime.clearDetail()
+                            }
                         }
                     }
 
-                    DetailView {
-                        anchors.fill: parent
-                        pluginApi: root.pluginApi
-                        visible:  root.browseStack === 1
-                        opacity:  visible ? 1 : 0
-                        Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                    // Library tab
+                    Item {
+                        LibraryView {
+                            anchors.fill: parent
+                            pluginApi: root.pluginApi
+                            visible:  root.libraryStack === 0
+                            opacity:  visible ? 1 : 0
+                            Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
 
-                        onBackRequested: {
-                            root.browseStack = 0
-                            if (root.anime) root.anime.clearDetail()
+                            onAnimeSelected: function(show) {
+                                if (root.anime) root.anime.fetchAnimeDetail(show)
+                                root.libraryStack = 1
+                            }
+
+                            onSettingsRequested: root.settingsOpen = true
+                        }
+
+                        DetailView {
+                            anchors.fill: parent
+                            pluginApi: root.pluginApi
+                            visible:  root.libraryStack === 1
+                            opacity:  visible ? 1 : 0
+                            Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+
+                            onBackRequested: {
+                                root.libraryStack = 0
+                                if (root.anime) root.anime.clearDetail()
+                            }
                         }
                     }
                 }
 
-                // Library tab
-                Item {
-                    LibraryView {
-                        anchors.fill: parent
-                        pluginApi: root.pluginApi
-                        visible:  root.libraryStack === 0
-                        opacity:  visible ? 1 : 0
-                        Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
-
-                        onAnimeSelected: function(show) {
-                            if (root.anime) root.anime.fetchAnimeDetail(show)
-                            root.libraryStack = 1
-                        }
-                    }
-
-                    DetailView {
-                        anchors.fill: parent
-                        pluginApi: root.pluginApi
-                        visible:  root.libraryStack === 1
-                        opacity:  visible ? 1 : 0
-                        Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
-
-                        onBackRequested: {
-                            root.libraryStack = 0
-                            if (root.anime) root.anime.clearDetail()
-                        }
-                    }
+                Rectangle {
+                    anchors.fill: contentStack
+                    visible: root.settingsOpen
+                    color: Qt.rgba(Color.mSurface.r, Color.mSurface.g, Color.mSurface.b, 0.42)
+                    opacity: root.settingsOpen ? 1 : 0
+                    Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
                 }
 
-                // Settings tab
                 SettingsView {
+                    anchors.fill: parent
                     pluginApi: root.pluginApi
+                    visible: root.settingsOpen
+                    opacity: visible ? 1 : 0
+                    z: 5
                     onBackRequested: root.settingsOpen = false
+                    Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
                 }
             }
 
@@ -129,15 +149,14 @@ Item {
                     Repeater {
                         model: [
                             { label: "Browse",   icon: "⊞" },
-                            { label: "Library",  icon: "⊟" },
-                            { label: "Settings", icon: "⚙" }
+                            { label: "Library",  icon: "⊟" }
                         ]
 
                         delegate: Item {
-                            width:  panelContainer.width / 3
+                            width:  panelContainer.width / 2
                             height: parent.height
 
-                            readonly property bool active: root.settingsOpen ? index === 2 : (!root.settingsOpen && root.tabIndex === index)
+                            readonly property bool active: !root.settingsOpen && root.tabIndex === index
 
                             Rectangle {
                                 anchors.fill: parent
@@ -183,12 +202,8 @@ Item {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 onClicked: {
-                                    if (index === 2) {
-                                        root.settingsOpen = true
-                                    } else {
-                                        root.settingsOpen = false
-                                        root.tabIndex = index
-                                    }
+                                    root.settingsOpen = false
+                                    root.tabIndex = index
                                 }
                             }
                         }
