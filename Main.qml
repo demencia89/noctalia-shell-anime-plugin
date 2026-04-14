@@ -22,11 +22,15 @@ Item {
 
     property string panelSize:  pluginApi?.pluginSettings?.panelSize  || "medium"
     property string posterSize: pluginApi?.pluginSettings?.posterSize || "medium"
+    property string preferredQuality: pluginApi?.pluginSettings?.preferredQuality || "best"
+    property string preferredProvider: pluginApi?.pluginSettings?.preferredProvider || "auto"
 
     function setSetting(key, val) {
         if (key === "mode") currentMode = val
         if (key === "panelSize") panelSize = val
         if (key === "posterSize") posterSize = val
+        if (key === "preferredQuality") preferredQuality = val
+        if (key === "preferredProvider") preferredProvider = val
         
         if (pluginApi) {
             pluginApi.pluginSettings[key] = val
@@ -46,7 +50,7 @@ Item {
         if (currentView === "search" && currentSearchQuery.length > 0)
             searchAnime(currentSearchQuery, true)
         else
-            fetchPopular(true)
+            fetchCurrentFeed(true)
     }
 
     // ── Browse state ──────────────────────────────────────────────────────────
@@ -54,12 +58,17 @@ Item {
     property bool   isFetchingAnime: false
     property string animeError:      ""
     property string currentView:     "popular"
+    property string browseFeed:      "popular"
     property string currentCountry:  "ALL"
     property string currentSearchQuery: ""
     property string currentGenre:    ""
     property var    genresList:      []
     property int    _page:           1
     property bool   _hasMore:        true
+    property real   browseScrollY:   0
+
+    // ── Library view state ───────────────────────────────────────────────────
+    property real libraryScrollY: 0
 
     // ── Detail state ──────────────────────────────────────────────────────────
     property var  currentAnime:     null
@@ -146,8 +155,21 @@ Item {
         var _ = libraryVersion
         var entry = libraryList.find(function(e) { return e.id === showId })
         if (!entry) return false
-        var prog = entry.episodeProgress || {}
-        return (prog[String(epNum)] || 0) > 0
+        return getEpisodeProgress(showId, epNum) > 0
+    }
+
+    function _progressPosition(value) {
+        if (typeof value === "number")
+            return value
+        if (value && typeof value === "object")
+            return value.position || 0
+        return 0
+    }
+
+    function _progressDuration(value) {
+        if (value && typeof value === "object")
+            return value.duration || 0
+        return 0
     }
 
     function _makeEntry(show, lastEpId, lastEpNum) {
@@ -164,7 +186,8 @@ Item {
             lastWatchedEpId:  lastEpId  ? String(lastEpId)  : "",
             lastWatchedEpNum: lastEpNum ? String(lastEpNum) : "",
             watchedEpisodes:  [],
-            episodeProgress:  {}
+            episodeProgress:  {},
+            updatedAt: Date.now()
         }
     }
 
@@ -203,7 +226,8 @@ Item {
                 lastWatchedEpId:  String(epId),
                 lastWatchedEpNum: String(epNum),
                 watchedEpisodes:  e.watchedEpisodes  || [],
-                episodeProgress:  e.episodeProgress  || {}
+                episodeProgress:  e.episodeProgress  || {},
+                updatedAt: Date.now()
             }
         })
         libraryList = updated
@@ -226,18 +250,59 @@ Item {
                 lastWatchedEpId:  e.lastWatchedEpId,
                 lastWatchedEpNum: e.lastWatchedEpNum,
                 watchedEpisodes:  watched,
-                episodeProgress:  prog
+                episodeProgress:  prog,
+                updatedAt: Date.now()
             }
         })
         libraryList = updated
         _saveLibrary()
     }
 
-    function saveEpisodeProgress(showId, epNum, position) {
+    function unmarkEpisodeWatched(showId, epNum) {
+        var updated = libraryList.map(function(e) {
+            if (e.id !== showId) return e
+            var watched = (e.watchedEpisodes || []).filter(function(item) {
+                return item !== String(epNum)
+            })
+            return {
+                id: e.id, name: e.name, englishName: e.englishName,
+                nativeName: e.nativeName, thumbnail: e.thumbnail,
+                score: e.score, type: e.type, episodeCount: e.episodeCount,
+                availableEpisodes: e.availableEpisodes, season: e.season,
+                lastWatchedEpId: e.lastWatchedEpNum === String(epNum) ? "" : e.lastWatchedEpId,
+                lastWatchedEpNum: e.lastWatchedEpNum === String(epNum) ? "" : e.lastWatchedEpNum,
+                watchedEpisodes: watched,
+                episodeProgress: e.episodeProgress || {},
+                updatedAt: Date.now()
+            }
+        })
+        libraryList = updated
+        _saveLibrary()
+    }
+
+    function toggleEpisodeWatched(show, epId, epNum) {
+        if (!show || !show.id) return
+        if (!isInLibrary(show.id)) {
+            addToLibraryWithEpisode(show, epId, epNum)
+            markEpisodeWatched(show.id, epNum)
+            return
+        }
+        if (isEpisodeWatched(show.id, epNum))
+            unmarkEpisodeWatched(show.id, epNum)
+        else {
+            updateLastWatched(show.id, epId, epNum)
+            markEpisodeWatched(show.id, epNum)
+        }
+    }
+
+    function saveEpisodeProgress(showId, epNum, position, duration) {
         var updated = libraryList.map(function(e) {
             if (e.id !== showId) return e
             var prog = Object.assign({}, e.episodeProgress || {})
-            prog[String(epNum)] = position
+            prog[String(epNum)] = {
+                position: position,
+                duration: duration || 0
+            }
             return {
                 id: e.id, name: e.name, englishName: e.englishName,
                 nativeName: e.nativeName, thumbnail: e.thumbnail,
@@ -246,7 +311,8 @@ Item {
                 lastWatchedEpId:  e.lastWatchedEpId,
                 lastWatchedEpNum: e.lastWatchedEpNum,
                 watchedEpisodes:  e.watchedEpisodes || [],
-                episodeProgress:  prog
+                episodeProgress:  prog,
+                updatedAt: Date.now()
             }
         })
         libraryList = updated
@@ -256,7 +322,31 @@ Item {
     function getEpisodeProgress(showId, epNum) {
         var entry = libraryList.find(function(e) { return e.id === showId })
         if (!entry) return 0
-        return (entry.episodeProgress || {})[String(epNum)] || 0
+        return _progressPosition((entry.episodeProgress || {})[String(epNum)])
+    }
+
+    function getEpisodeProgressRatio(showId, epNum) {
+        var entry = libraryList.find(function(e) { return e.id === showId })
+        if (!entry) return 0
+        var progress = (entry.episodeProgress || {})[String(epNum)]
+        var position = _progressPosition(progress)
+        var duration = _progressDuration(progress)
+        if (duration <= 0 || position <= 0) return 0
+        return Math.max(0, Math.min(1, position / duration))
+    }
+
+    function getContinueWatchingList() {
+        var _ = libraryVersion
+        return libraryList
+            .filter(function(entry) {
+                var prog = entry.episodeProgress || {}
+                return Object.keys(prog).some(function(key) {
+                    return root._progressPosition(prog[key]) > 0
+                })
+            })
+            .sort(function(a, b) {
+                return (b.updatedAt || 0) - (a.updatedAt || 0)
+            })
     }
 
     function commitPendingEpisodeSelection() {
@@ -265,6 +355,14 @@ Item {
             updateLastWatched(_playingShowId, _pendingEpisodeId, _playingEpNum)
         else
             addToLibraryWithEpisode(currentAnime, _pendingEpisodeId, _playingEpNum)
+    }
+
+    function setBrowseScroll(y) {
+        browseScrollY = Math.max(0, y || 0)
+    }
+
+    function setLibraryScroll(y) {
+        libraryScrollY = Math.max(0, y || 0)
     }
 
     // ── MPV launch & progress tracking ───────────────────────────────────────
@@ -407,7 +505,7 @@ Item {
                     rmProc.running = true
                 } else {
                     // Partially watched — save position
-                    root.saveEpisodeProgress(_showId, _epNum, pos)
+                    root.saveEpisodeProgress(_showId, _epNum, pos, dur)
                 }
             }
 
@@ -590,12 +688,20 @@ Item {
         if (currentView === "search" && currentSearchQuery.length > 0)
             searchAnime(currentSearchQuery, true)
         else
-            fetchPopular(true)
+            fetchCurrentFeed(true)
+    }
+
+    function fetchCurrentFeed(reset) {
+        if (browseFeed === "latest")
+            fetchLatest(reset)
+        else
+            fetchPopular(reset)
     }
 
     function fetchPopular(reset) {
         if (reset) { _page = 1; _hasMore = true }
         if (!_hasMore || isFetchingAnime) return
+        browseFeed = "popular"
         currentView = "popular"
         currentSearchQuery = ""
         var args = ["popular", String(_page), currentMode]
@@ -603,9 +709,21 @@ Item {
         _runBrowse(args, reset || _page === 1)
     }
 
+    function fetchLatest(reset) {
+        if (reset) { _page = 1; _hasMore = true }
+        if (!_hasMore || isFetchingAnime) return
+        browseFeed = "latest"
+        currentView = "latest"
+        currentSearchQuery = ""
+        var args = ["latest", String(_page), currentMode, currentCountry]
+        _runBrowse(args, reset || _page === 1)
+    }
+
     function fetchNextPage() {
         if (currentView === "search")
             searchAnime(currentSearchQuery, false)
+        else if (browseFeed === "latest")
+            fetchLatest(false)
         else
             fetchPopular(false)
     }
@@ -650,7 +768,8 @@ Item {
         isFetchingLinks = true
         streamProc._buf  = ""
         streamProc.command = ["python3", scriptPath, "stream",
-                              showId, String(epNum), currentMode]
+                              showId, String(epNum), currentMode,
+                              preferredProvider, preferredQuality]
         if (streamProc.running) {
             streamProc.running = false
             Qt.callLater(function() { streamProc.running = true })

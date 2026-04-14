@@ -38,6 +38,14 @@ _GENRES = [
     "Sci-Fi", "Slice of Life", "Sports", "Supernatural", "Thriller"
 ]
 
+_PROVIDER_PRIORITY = {
+    "auto": ["Default", "S-mp4", "Luf-Mp4", "Yt-mp4"],
+    "default": ["Default", "S-mp4", "Luf-Mp4", "Yt-mp4"],
+    "sharepoint": ["S-mp4", "Default", "Luf-Mp4", "Yt-mp4"],
+    "hianime": ["Luf-Mp4", "Default", "S-mp4", "Yt-mp4"],
+    "youtube": ["Yt-mp4", "Default", "S-mp4", "Luf-Mp4"],
+}
+
 # ── Hex-decode table (from ani-cli provider_init) ─────────────────────────────
 _HEX = {
     "79":"A","7a":"B","7b":"C","7c":"D","7d":"E","7e":"F","7f":"G","70":"H",
@@ -149,7 +157,28 @@ def cmd_episodes(show_id, mode="sub"):
         "thumbnail": show.get("thumbnail") or "",
     }))
 
-def cmd_stream(show_id, ep_num, mode="sub"):
+def _pick_quality(links, quality_pref):
+    def _res(pair):
+        try:
+            return int(pair[1].rstrip("p"))
+        except Exception:
+            return 0
+
+    links = sorted(links, key=_res, reverse=True)
+    if quality_pref == "best":
+        return links[0]
+
+    try:
+        target = int(str(quality_pref).rstrip("p"))
+    except Exception:
+        return links[0]
+
+    at_or_below = [pair for pair in links if _res(pair) <= target]
+    if at_or_below:
+        return at_or_below[0]
+    return links[-1]
+
+def cmd_stream(show_id, ep_num, mode="sub", provider_pref="auto", quality_pref="best"):
     data = _gql({
         "showId": show_id,
         "translationType": mode,
@@ -167,8 +196,7 @@ def cmd_stream(show_id, ep_num, mode="sub"):
         if name and url:
             sources[name] = url
 
-    # Priority: wixmp (Default) > sharepoint (S-mp4) > hianime (Luf-Mp4) > youtube (Yt-mp4)
-    for provider in ["Default", "S-mp4", "Luf-Mp4", "Yt-mp4"]:
+    for provider in _PROVIDER_PRIORITY.get(provider_pref, _PROVIDER_PRIORITY["auto"]):
         raw = sources.get(provider)
         if not raw or not raw.startswith("--"):
             continue
@@ -200,11 +228,7 @@ def cmd_stream(show_id, ep_num, mode="sub"):
         # mp4 links with resolution
         links = re.findall(r'"link":"([^"]+)"[^}]*"resolutionStr":"([^"]+)"', resp)
         if links:
-            def _res(pair):
-                try: return int(pair[1].rstrip("p"))
-                except: return 0
-            links.sort(key=_res, reverse=True)
-            url, res = links[0]
+            url, res = _pick_quality(links, quality_pref)
             if "repackager.wixmp.com" in url:
                 url = re.sub(r"repackager\.wixmp\.com/", "", url)
                 url = re.sub(r"\.urlset.*", "", url)
@@ -271,6 +295,8 @@ def main():
                 args[1],
                 args[2],
                 args[3] if len(args) > 3 else "sub",
+                args[4] if len(args) > 4 else "auto",
+                args[5] if len(args) > 5 else "best",
             )
         else:
             print(json.dumps({"error": f"Unknown command: {cmd}"}))

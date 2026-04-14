@@ -14,6 +14,38 @@ Item {
     signal animeSelected(var show)
     signal settingsRequested()
 
+    function openEntry(entry) {
+        libraryView.animeSelected({
+            id:               entry.id,
+            name:             entry.name,
+            englishName:      entry.englishName,
+            nativeName:       entry.nativeName || "",
+            thumbnail:        entry.thumbnail,
+            score:            entry.score,
+            type:             entry.type || "",
+            episodeCount:     entry.episodeCount || "",
+            availableEpisodes: entry.availableEpisodes || { sub: 0, dub: 0, raw: 0 },
+            season:           entry.season || null
+        })
+    }
+
+    function resumeEpisodeFor(entry) {
+        if (!entry) return ""
+        if (entry.lastWatchedEpNum) return entry.lastWatchedEpNum
+        var prog = entry.episodeProgress || {}
+        var episodes = Object.keys(prog).filter(function(key) {
+            return anime?._progressPosition(prog[key]) > 0
+        })
+        episodes.sort(function(a, b) { return Number(b) - Number(a) })
+        return episodes.length > 0 ? episodes[0] : ""
+    }
+
+    function resumeProgressRatioFor(entry) {
+        var epNum = resumeEpisodeFor(entry)
+        if (!entry || !epNum || !anime) return 0
+        return anime.getEpisodeProgressRatio(entry.id, epNum)
+    }
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
@@ -192,265 +224,503 @@ Item {
             }
         }
 
-        // ── Library grid ──────────────────────────────────────────────────────
-        GridView {
-            id: libGrid
-            Layout.fillWidth: true; Layout.fillHeight: true
+        Item {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
             visible: (anime?.libraryList?.length ?? 0) > 0
-            topMargin: 10; leftMargin: 8; rightMargin: 8; bottomMargin: 10
-            
-            readonly property var columnsMap: ({ "small": 8, "medium": 5, "large": 3 })
-            readonly property int columns: columnsMap[anime?.posterSize || "medium"]
-            
-            cellWidth: Math.floor((width - leftMargin - rightMargin) / columns)
-            cellHeight: cellWidth * 1.78
-            clip: true; boundsBehavior: Flickable.StopAtBounds
-            model: {
-                var _ = anime?.libraryVersion ?? 0  // reactive trigger
-                return anime?.libraryList ?? []
-            }
 
-            ScrollBar.vertical: ScrollBar {
-                policy: ScrollBar.AsNeeded
-                contentItem: Rectangle {
-                    implicitWidth: 3; color: Color.mPrimary; opacity: 0.45; radius: 2
-                }
-            }
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: 0
 
-            delegate: Item {
-                width: libGrid.cellWidth
-                height: libGrid.cellHeight
+                Item {
+                    id: continueSection
+                    readonly property var continueEntries: anime?.getContinueWatchingList() ?? []
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: continueEntries.length > 0 ? 168 : 0
+                    visible: continueEntries.length > 0
 
-                readonly property var entry: modelData
-
-                Rectangle {
-                    id: libCard
-                    anchors { fill: parent; margins: 5 }
-                    radius: 10; color: Qt.rgba(Color.mSurfaceVariant.r, Color.mSurfaceVariant.g, Color.mSurfaceVariant.b, 0.45)
-                    clip: true
-
-                    // Cover
-                    Rectangle {
-                        id: libImageWrapper
-                        anchors { top: parent.top; left: parent.left; right: parent.right }
-                        height: parent.height - libTitleBar.height - libEpBar.height
-                        radius: 10
-                        color: "transparent"
-                        clip: true
-                        layer.enabled: true
-                        layer.effect: OpacityMask {
-                            maskSource: Rectangle {
-                                width: libImageWrapper.width
-                                height: libImageWrapper.height
-                                radius: libImageWrapper.radius
-                            }
-                        }
-
-                        Image {
-                            id: libCover
-                            anchors.fill: parent
-                            source: entry.thumbnail || ""
-                            fillMode: Image.PreserveAspectCrop
-                            asynchronous: true; cache: true
-                            opacity: status === Image.Ready ? 1 : 0
-                            Behavior on opacity { NumberAnimation { duration: 300 } }
-
-                            Rectangle {
-                                anchors.fill: parent; color: Color.mSurfaceVariant
-                                visible: libCover.status !== Image.Ready
-                                Text {
-                                    anchors.centerIn: parent; text: "◫"
-                                    font.pixelSize: 28; color: Color.mOutline; opacity: 0.25
-                                }
-                            }
-
-                            // Score badge
-                            Rectangle {
-                                visible: entry.score != null
-                                anchors { top: parent.top; left: parent.left; topMargin: 6; leftMargin: 6 }
-                                height: 18; radius: 9; width: libScoreText.implicitWidth + 10
-                                color: Qt.rgba(Color.mSurface.r, Color.mSurface.g, Color.mSurface.b, 0.88)
-                                border.width: 1
-                                border.color: Qt.rgba(Color.mOutlineVariant.r, Color.mOutlineVariant.g, Color.mOutlineVariant.b, 0.38)
-
-                                Text {
-                                    id: libScoreText; anchors.centerIn: parent
-                                    text: entry.score ? "★ " + (entry.score).toFixed(1) : ""
-                                    font.pixelSize: 8; font.bold: true
-                                    color: Color.mPrimary
-                                }
-                            }
-
-                            // Gradient
-                            Rectangle {
-                                anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
-                                height: 40
-                                gradient: Gradient {
-                                    GradientStop { position: 0.0; color: "transparent" }
-                                    GradientStop { position: 1.0; color: Color.mSurfaceVariant }
-                                }
-                            }
-                        }
-                    }
-
-                    // Title bar
-                    Rectangle {
-                        id: libTitleBar
-                        anchors { bottom: libEpBar.top; left: parent.left; right: parent.right }
-                        height: libTitleText.implicitHeight + 10
-                        color: Color.mSurfaceVariant
-
-                        Text {
-                            id: libTitleText
-                            anchors {
-                                left: parent.left; right: parent.right
-                                verticalCenter: parent.verticalCenter
-                                leftMargin: 8; rightMargin: 8
-                            }
-                            text: entry.englishName || entry.name || ""
-                            font.pixelSize: 10; font.letterSpacing: 0.2
-                            color: Color.mOnSurface
-                            wrapMode: Text.Wrap; maximumLineCount: 2
-                            elide: Text.ElideRight; lineHeight: 1.3
-                        }
-                    }
-
-                    // Last-watched bar
-                    Rectangle {
-                        id: libEpBar
-                        anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
-                        height: 28; color: Color.mSurface; radius: 10
-
-                        // Square off top corners
-                        Rectangle {
-                            anchors { top: parent.top; left: parent.left; right: parent.right }
-                            height: parent.radius; color: parent.color
-                        }
+                    Column {
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        spacing: 10
 
                         Row {
-                            anchors {
-                                verticalCenter: parent.verticalCenter
-                                left: parent.left; leftMargin: 8
-                            }
-                            spacing: 5
+                            width: parent.width
+                            spacing: 8
 
                             Text {
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: "▶"; font.pixelSize: 7
-                                color: entry.lastWatchedEpNum ? Color.mPrimary : Color.mOutline
-                                opacity: entry.lastWatchedEpNum ? 1 : 0.4
-                            }
-                            Text {
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: entry.lastWatchedEpNum
-                                    ? "Ep. " + entry.lastWatchedEpNum
-                                    : "Not started"
-                                font.pixelSize: 10; font.letterSpacing: 0.4
-                                color: entry.lastWatchedEpNum
-                                    ? Color.mOnSurface : Color.mOnSurfaceVariant
-                                opacity: entry.lastWatchedEpNum ? 0.85 : 0.45
+                                text: "Continue Watching"
+                                font.pixelSize: 14
+                                font.bold: true
+                                color: Color.mOnSurface
                             }
 
                             Rectangle {
-                                visible: (entry.watchedEpisodes || []).length > 0
-                                anchors.verticalCenter: parent.verticalCenter
-                                height: 14; radius: 7
-                                width: watchedCountText.implicitWidth + 8
-                                color: Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.18)
+                                height: 20
+                                width: continueCount.implicitWidth + 14
+                                radius: 10
+                                color: Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.12)
+                                border.width: 1
+                                border.color: Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.28)
 
                                 Text {
-                                    id: watchedCountText
+                                    id: continueCount
                                     anchors.centerIn: parent
-                                    text: "✓ " + (entry.watchedEpisodes || []).length
-                                    font.pixelSize: 8; font.bold: true
+                                    text: continueSection.continueEntries.length + " active"
+                                    font.pixelSize: 9
+                                    font.bold: true
+                                    font.letterSpacing: 0.5
                                     color: Color.mPrimary
                                 }
                             }
                         }
+
+                        ListView {
+                            id: continueRail
+                            width: parent.width
+                            height: 128
+                            orientation: ListView.Horizontal
+                            spacing: 10
+                            boundsBehavior: Flickable.StopAtBounds
+                            clip: true
+                            model: continueSection.continueEntries
+
+                            delegate: Item {
+                                width: 232
+                                height: continueRail.height
+
+                                readonly property var entry: modelData
+                                readonly property string resumeEpisode: libraryView.resumeEpisodeFor(entry)
+                                readonly property real progressRatio: libraryView.resumeProgressRatioFor(entry)
+
+                                Rectangle {
+                                    anchors.fill: parent
+                                    radius: 18
+                                    color: Qt.rgba(Color.mSurface.r, Color.mSurface.g, Color.mSurface.b, 0.9)
+                                    border.width: 1
+                                    border.color: Qt.rgba(Color.mOutlineVariant.r, Color.mOutlineVariant.g, Color.mOutlineVariant.b, 0.38)
+
+                                    Row {
+                                        anchors.fill: parent
+                                        anchors.margins: 10
+                                        spacing: 10
+
+                                        Rectangle {
+                                            width: 72
+                                            height: parent.height
+                                            radius: 12
+                                            clip: true
+                                            color: Color.mSurfaceVariant
+
+                                            Image {
+                                                anchors.fill: parent
+                                                source: entry.thumbnail || ""
+                                                fillMode: Image.PreserveAspectCrop
+                                                asynchronous: true
+                                                cache: true
+                                            }
+                                        }
+
+                                        Column {
+                                            width: parent.width - 82
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            spacing: 6
+
+                                            Rectangle {
+                                                height: 20
+                                                width: resumeText.implicitWidth + 14
+                                                radius: 10
+                                                color: Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.12)
+
+                                                Text {
+                                                    id: resumeText
+                                                    anchors.centerIn: parent
+                                                    text: resumeEpisode ? "Resume Ep. " + resumeEpisode : "In progress"
+                                                    font.pixelSize: 9
+                                                    font.bold: true
+                                                    font.letterSpacing: 0.4
+                                                    color: Color.mPrimary
+                                                }
+                                            }
+
+                                            Text {
+                                                width: parent.width
+                                                text: entry.englishName || entry.name || ""
+                                                font.pixelSize: 13
+                                                font.bold: true
+                                                color: Color.mOnSurface
+                                                wrapMode: Text.Wrap
+                                                maximumLineCount: 2
+                                                elide: Text.ElideRight
+                                                lineHeight: 1.25
+                                            }
+
+                                            Text {
+                                                width: parent.width
+                                                text: (entry.watchedEpisodes || []).length > 0
+                                                    ? (entry.watchedEpisodes || []).length + " watched"
+                                                    : "Pick up where you left off"
+                                                font.pixelSize: 10
+                                                color: Color.mOnSurfaceVariant
+                                                opacity: 0.78
+                                                elide: Text.ElideRight
+                                            }
+
+                                            Rectangle {
+                                                width: parent.width
+                                                height: 6
+                                                radius: 3
+                                                color: Qt.rgba(Color.mOutlineVariant.r, Color.mOutlineVariant.g, Color.mOutlineVariant.b, 0.26)
+                                                visible: progressRatio > 0
+
+                                                Rectangle {
+                                                    width: parent.width * progressRatio
+                                                    height: parent.height
+                                                    radius: parent.radius
+                                                    color: Color.mTertiary
+                                                }
+                                            }
+
+                                            Item { width: 1; height: 2 }
+
+                                            Rectangle {
+                                                width: 88
+                                                height: 28
+                                                radius: 14
+                                                color: continueArea.containsMouse ? Color.mPrimary : Color.mPrimaryContainer
+                                                border.width: 1
+                                                border.color: Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.3)
+                                                Behavior on color { ColorAnimation { duration: 140 } }
+
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: "Open"
+                                                    font.pixelSize: 10
+                                                    font.bold: true
+                                                    font.letterSpacing: 0.5
+                                                    color: continueArea.containsMouse ? Color.mOnPrimary : Color.mOnPrimaryContainer
+                                                    Behavior on color { ColorAnimation { duration: 140 } }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    MouseArea {
+                                        id: continueArea
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: libraryView.openEntry(entry)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── Library grid ──────────────────────────────────────────
+                GridView {
+                    id: libGrid
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    topMargin: continueSection.visible ? 0 : 10
+                    leftMargin: 8
+                    rightMargin: 8
+                    bottomMargin: 10
+
+                    readonly property var columnsMap: ({ "small": 8, "medium": 5, "large": 3 })
+                    readonly property int columns: columnsMap[anime?.posterSize || "medium"]
+
+                    cellWidth: Math.floor((width - leftMargin - rightMargin) / columns)
+                    cellHeight: cellWidth * 1.78
+                    clip: true; boundsBehavior: Flickable.StopAtBounds
+                    model: {
+                        var _ = anime?.libraryVersion ?? 0  // reactive trigger
+                        return anime?.libraryList ?? []
                     }
 
-                    Rectangle {
-                        id: libraryAction
-                        anchors { top: parent.top; horizontalCenter: parent.horizontalCenter; topMargin: 8 }
-                        width: 32
-                        height: 32
-                        radius: 16
-                        color: libraryActionArea.containsMouse
-                            ? Qt.rgba(Color.mErrorContainer.r, Color.mErrorContainer.g, Color.mErrorContainer.b, 0.96)
-                            : Color.mPrimary
-                        border.width: 1
-                        border.color: libraryActionArea.containsMouse
-                            ? Color.mError
-                            : Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.6)
-                        z: 3
+                    ScrollBar.vertical: ScrollBar {
+                        policy: ScrollBar.AsNeeded
+                        contentItem: Rectangle {
+                            implicitWidth: 3; color: Color.mPrimary; opacity: 0.45; radius: 2
+                        }
+                    }
 
-                        Behavior on color { ColorAnimation { duration: 140 } }
-                        ToolTip.visible: libraryActionArea.containsMouse
-                        ToolTip.text: "Remove from library"
+                    onContentYChanged: {
+                        if (anime) anime.setLibraryScroll(contentY)
+                    }
 
-                        NIcon {
-                            anchors.centerIn: parent
-                            icon: "bookmark"
-                            pointSize: 14
-                            color: Color.mOnPrimary
-                            opacity: libraryActionArea.containsMouse ? 0 : 1
-                            scale: libraryActionArea.containsMouse ? 0.7 : 1
-                            Behavior on opacity { NumberAnimation { duration: 110 } }
-                            Behavior on scale { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
+                    onVisibleChanged: {
+                        if (!visible || !anime) return
+                        Qt.callLater(function() {
+                            libGrid.contentY = Math.min(
+                                anime.libraryScrollY || 0,
+                                Math.max(0, libGrid.contentHeight - libGrid.height)
+                            )
+                        })
+                    }
+
+                    onContentHeightChanged: {
+                        if (!visible || !anime) return
+                        if ((anime.libraryScrollY || 0) <= 0) return
+                        Qt.callLater(function() {
+                            libGrid.contentY = Math.min(
+                                anime.libraryScrollY || 0,
+                                Math.max(0, libGrid.contentHeight - libGrid.height)
+                            )
+                        })
+                    }
+
+                    delegate: Item {
+                        width: libGrid.cellWidth
+                        height: libGrid.cellHeight
+
+                        readonly property var entry: modelData
+                        readonly property real activeProgressRatio: {
+                            if (!anime || !entry.lastWatchedEpNum) return 0
+                            return anime.getEpisodeProgressRatio(entry.id, entry.lastWatchedEpNum)
                         }
 
-                        Text {
-                            anchors.centerIn: parent
-                            text: "−"
-                            font.pixelSize: 18
-                            font.bold: true
-                            color: Color.mOnErrorContainer
-                            opacity: libraryActionArea.containsMouse ? 1 : 0
-                            scale: libraryActionArea.containsMouse ? 1 : 0.7
-                            Behavior on opacity { NumberAnimation { duration: 110 } }
-                            Behavior on scale { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
-                        }
+                        Rectangle {
+                            id: libCard
+                            anchors { fill: parent; margins: 5 }
+                            radius: 10; color: Qt.rgba(Color.mSurfaceVariant.r, Color.mSurfaceVariant.g, Color.mSurfaceVariant.b, 0.45)
+                            clip: true
 
-                        MouseArea {
-                            id: libraryActionArea
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            acceptedButtons: Qt.LeftButton
-                            onClicked: if (anime) anime.removeFromLibrary(entry.id)
-                        }
-                    }
+                            // Cover
+                            Rectangle {
+                                id: libImageWrapper
+                                anchors { top: parent.top; left: parent.left; right: parent.right }
+                                height: parent.height - libTitleBar.height - libEpBar.height
+                                radius: 10
+                                color: "transparent"
+                                clip: true
+                                layer.enabled: true
+                                layer.effect: OpacityMask {
+                                    maskSource: Rectangle {
+                                        width: libImageWrapper.width
+                                        height: libImageWrapper.height
+                                        radius: libImageWrapper.radius
+                                    }
+                                }
 
-                    // Hover/press overlay
-                    Rectangle {
-                        anchors.fill: parent; radius: 10; color: Color.mPrimary
-                        opacity: libCardArea.pressed ? 0.16 : (libCardArea.containsMouse ? 0.07 : 0)
-                        Behavior on opacity { NumberAnimation { duration: 130 } }
-                    }
+                                Image {
+                                    id: libCover
+                                    anchors.fill: parent
+                                    source: entry.thumbnail || ""
+                                    fillMode: Image.PreserveAspectCrop
+                                    asynchronous: true; cache: true
+                                    opacity: status === Image.Ready ? 1 : 0
+                                    Behavior on opacity { NumberAnimation { duration: 300 } }
 
-                    transform: Scale {
-                        origin.x: libCard.width / 2; origin.y: libCard.height / 2
-                        xScale: libCardArea.pressed ? 0.97 : 1.0
-                        yScale: libCardArea.pressed ? 0.97 : 1.0
-                        Behavior on xScale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
-                        Behavior on yScale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
-                    }
+                                    Rectangle {
+                                        anchors.fill: parent; color: Color.mSurfaceVariant
+                                        visible: libCover.status !== Image.Ready
+                                        Text {
+                                            anchors.centerIn: parent; text: "◫"
+                                            font.pixelSize: 28; color: Color.mOutline; opacity: 0.25
+                                        }
+                                    }
 
-                    MouseArea {
-                        id: libCardArea; anchors.fill: parent; hoverEnabled: true
-                        onClicked: {
-                            libraryView.animeSelected({
-                                id:               entry.id,
-                                name:             entry.name,
-                                englishName:      entry.englishName,
-                                nativeName:       entry.nativeName  || "",
-                                thumbnail:        entry.thumbnail,
-                                score:            entry.score,
-                                type:             entry.type        || "",
-                                episodeCount:     entry.episodeCount || "",
-                                availableEpisodes: entry.availableEpisodes || { sub: 0, dub: 0, raw: 0 },
-                                season:           entry.season      || null
-                            })
+                                    // Score badge
+                                    Rectangle {
+                                        visible: entry.score != null
+                                        anchors { top: parent.top; left: parent.left; topMargin: 6; leftMargin: 6 }
+                                        height: 18; radius: 9; width: libScoreText.implicitWidth + 10
+                                        color: Qt.rgba(Color.mSurface.r, Color.mSurface.g, Color.mSurface.b, 0.88)
+                                        border.width: 1
+                                        border.color: Qt.rgba(Color.mOutlineVariant.r, Color.mOutlineVariant.g, Color.mOutlineVariant.b, 0.38)
+
+                                        Text {
+                                            id: libScoreText; anchors.centerIn: parent
+                                            text: entry.score ? "★ " + (entry.score).toFixed(1) : ""
+                                            font.pixelSize: 8; font.bold: true
+                                            color: Color.mPrimary
+                                        }
+                                    }
+
+                                    // Gradient
+                                    Rectangle {
+                                        anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
+                                        height: 40
+                                        gradient: Gradient {
+                                            GradientStop { position: 0.0; color: "transparent" }
+                                            GradientStop { position: 1.0; color: Color.mSurfaceVariant }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Title bar
+                            Rectangle {
+                                id: libTitleBar
+                                anchors { bottom: libEpBar.top; left: parent.left; right: parent.right }
+                                height: libTitleText.implicitHeight + 10
+                                color: Color.mSurfaceVariant
+
+                                Text {
+                                    id: libTitleText
+                                    anchors {
+                                        left: parent.left; right: parent.right
+                                        verticalCenter: parent.verticalCenter
+                                        leftMargin: 8; rightMargin: 8
+                                    }
+                                    text: entry.englishName || entry.name || ""
+                                    font.pixelSize: 10; font.letterSpacing: 0.2
+                                    color: Color.mOnSurface
+                                    wrapMode: Text.Wrap; maximumLineCount: 2
+                                    elide: Text.ElideRight; lineHeight: 1.3
+                                }
+                            }
+
+                            // Last-watched bar
+                            Rectangle {
+                                id: libEpBar
+                                anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
+                                height: 28; color: Color.mSurface; radius: 10
+
+                                // Square off top corners
+                                Rectangle {
+                                    anchors { top: parent.top; left: parent.left; right: parent.right }
+                                    height: parent.radius; color: parent.color
+                                }
+
+                                Row {
+                                    anchors {
+                                        verticalCenter: parent.verticalCenter
+                                        left: parent.left; leftMargin: 8
+                                    }
+                                    spacing: 5
+
+                                    Text {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: "▶"; font.pixelSize: 7
+                                        color: entry.lastWatchedEpNum ? Color.mPrimary : Color.mOutline
+                                        opacity: entry.lastWatchedEpNum ? 1 : 0.4
+                                    }
+                                    Text {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: entry.lastWatchedEpNum
+                                            ? "Ep. " + entry.lastWatchedEpNum
+                                            : "Not started"
+                                        font.pixelSize: 10; font.letterSpacing: 0.4
+                                        color: entry.lastWatchedEpNum
+                                            ? Color.mOnSurface : Color.mOnSurfaceVariant
+                                        opacity: entry.lastWatchedEpNum ? 0.85 : 0.45
+                                    }
+
+                                    Rectangle {
+                                        visible: (entry.watchedEpisodes || []).length > 0
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        height: 14; radius: 7
+                                        width: watchedCountText.implicitWidth + 8
+                                        color: Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.18)
+
+                                        Text {
+                                            id: watchedCountText
+                                            anchors.centerIn: parent
+                                            text: "✓ " + (entry.watchedEpisodes || []).length
+                                            font.pixelSize: 8; font.bold: true
+                                            color: Color.mPrimary
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    anchors {
+                                        left: parent.left
+                                        right: parent.right
+                                        bottom: parent.bottom
+                                        leftMargin: 8
+                                        rightMargin: 8
+                                        bottomMargin: 4
+                                    }
+                                    height: 3
+                                    radius: 2
+                                    color: Qt.rgba(Color.mOutlineVariant.r, Color.mOutlineVariant.g, Color.mOutlineVariant.b, 0.22)
+                                    visible: activeProgressRatio > 0
+
+                                    Rectangle {
+                                        width: parent.width * activeProgressRatio
+                                        height: parent.height
+                                        radius: parent.radius
+                                        color: Color.mTertiary
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                id: libraryAction
+                                anchors { top: parent.top; horizontalCenter: parent.horizontalCenter; topMargin: 8 }
+                                width: 32
+                                height: 32
+                                radius: 16
+                                color: libraryActionArea.containsMouse
+                                    ? Qt.rgba(Color.mErrorContainer.r, Color.mErrorContainer.g, Color.mErrorContainer.b, 0.96)
+                                    : Color.mPrimary
+                                border.width: 1
+                                border.color: libraryActionArea.containsMouse
+                                    ? Color.mError
+                                    : Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.6)
+                                z: 3
+
+                                Behavior on color { ColorAnimation { duration: 140 } }
+                                ToolTip.visible: libraryActionArea.containsMouse
+                                ToolTip.text: "Remove from library"
+
+                                NIcon {
+                                    anchors.centerIn: parent
+                                    icon: "bookmark"
+                                    pointSize: 14
+                                    color: Color.mOnPrimary
+                                    opacity: libraryActionArea.containsMouse ? 0 : 1
+                                    scale: libraryActionArea.containsMouse ? 0.7 : 1
+                                    Behavior on opacity { NumberAnimation { duration: 110 } }
+                                    Behavior on scale { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
+                                }
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "−"
+                                    font.pixelSize: 18
+                                    font.bold: true
+                                    color: Color.mOnErrorContainer
+                                    opacity: libraryActionArea.containsMouse ? 1 : 0
+                                    scale: libraryActionArea.containsMouse ? 1 : 0.7
+                                    Behavior on opacity { NumberAnimation { duration: 110 } }
+                                    Behavior on scale { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
+                                }
+
+                                MouseArea {
+                                    id: libraryActionArea
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    acceptedButtons: Qt.LeftButton
+                                    onClicked: if (anime) anime.removeFromLibrary(entry.id)
+                                }
+                            }
+
+                            // Hover/press overlay
+                            Rectangle {
+                                anchors.fill: parent; radius: 10; color: Color.mPrimary
+                                opacity: libCardArea.pressed ? 0.16 : (libCardArea.containsMouse ? 0.07 : 0)
+                                Behavior on opacity { NumberAnimation { duration: 130 } }
+                            }
+
+                            transform: Scale {
+                                origin.x: libCard.width / 2; origin.y: libCard.height / 2
+                                xScale: libCardArea.pressed ? 0.97 : 1.0
+                                yScale: libCardArea.pressed ? 0.97 : 1.0
+                                Behavior on xScale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+                                Behavior on yScale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+                            }
+
+                            MouseArea {
+                                id: libCardArea; anchors.fill: parent; hoverEnabled: true
+                                onClicked: libraryView.openEntry(entry)
+                            }
                         }
                     }
                 }

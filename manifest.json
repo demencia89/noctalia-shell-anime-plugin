@@ -21,7 +21,9 @@
   },
   "metadata": {
     "defaultSettings": {
-      "mode": "sub"
+      "mode": "sub",
+      "preferredQuality": "best",
+      "preferredProvider": "auto"
     }
   }
 }

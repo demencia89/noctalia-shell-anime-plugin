@@ -202,7 +202,7 @@ Item {
 
                             Text {
                                 width: parent.width
-                                text: "Adjust the drawer width and poster density so browsing feels right on your screen."
+                                text: "Adjust the drawer width, poster density, and playback defaults so browsing feels right on your screen."
                                 wrapMode: Text.Wrap
                                 lineHeight: 1.35
                                 font.pixelSize: 11
@@ -348,6 +348,152 @@ Item {
                                         text: modelData.label
                                         active: anime?.posterSize === modelData.value
                                         onClicked: if (anime) anime.setSetting("posterSize", modelData.value)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        width: parent.width
+                        radius: 20
+                        color: Qt.rgba(Color.mSurface.r, Color.mSurface.g, Color.mSurface.b, 0.86)
+                        border.width: 1
+                        border.color: Qt.rgba(Color.mOutlineVariant.r, Color.mOutlineVariant.g, Color.mOutlineVariant.b, 0.4)
+                        implicitHeight: qualitySection.implicitHeight + 32
+
+                        Column {
+                            id: qualitySection
+                            anchors.fill: parent
+                            anchors.margins: 16
+                            spacing: 12
+
+                            Row {
+                                spacing: 10
+
+                                Rectangle {
+                                    width: 28
+                                    height: 28
+                                    radius: 14
+                                    color: Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.12)
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "HD"
+                                        font.pixelSize: 10
+                                        font.bold: true
+                                        color: Color.mPrimary
+                                    }
+                                }
+
+                                Column {
+                                    spacing: 2
+
+                                    Text {
+                                        text: "Preferred Quality"
+                                        font.pixelSize: 14
+                                        font.bold: true
+                                        color: Color.mOnSurface
+                                    }
+
+                                    Text {
+                                        text: "Choose which stream quality to prefer when multiple MP4 options exist"
+                                        font.pixelSize: 11
+                                        color: Color.mOnSurfaceVariant
+                                        opacity: 0.72
+                                    }
+                                }
+                            }
+
+                            Flow {
+                                width: parent.width
+                                spacing: 10
+
+                                Repeater {
+                                    model: [
+                                        { label: "Best", value: "best" },
+                                        { label: "1080p", value: "1080" },
+                                        { label: "720p", value: "720" },
+                                        { label: "480p", value: "480" }
+                                    ]
+
+                                    delegate: SettingChoiceButton {
+                                        text: modelData.label
+                                        active: anime?.preferredQuality === modelData.value
+                                        onClicked: if (anime) anime.setSetting("preferredQuality", modelData.value)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        width: parent.width
+                        radius: 20
+                        color: Qt.rgba(Color.mSurface.r, Color.mSurface.g, Color.mSurface.b, 0.86)
+                        border.width: 1
+                        border.color: Qt.rgba(Color.mOutlineVariant.r, Color.mOutlineVariant.g, Color.mOutlineVariant.b, 0.4)
+                        implicitHeight: providerSection.implicitHeight + 32
+
+                        Column {
+                            id: providerSection
+                            anchors.fill: parent
+                            anchors.margins: 16
+                            spacing: 12
+
+                            Row {
+                                spacing: 10
+
+                                Rectangle {
+                                    width: 28
+                                    height: 28
+                                    radius: 14
+                                    color: Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.12)
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "↺"
+                                        font.pixelSize: 12
+                                        color: Color.mPrimary
+                                    }
+                                }
+
+                                Column {
+                                    spacing: 2
+
+                                    Text {
+                                        text: "Preferred Provider"
+                                        font.pixelSize: 14
+                                        font.bold: true
+                                        color: Color.mOnSurface
+                                    }
+
+                                    Text {
+                                        text: "Prioritize a stream source, while still falling back if it fails"
+                                        font.pixelSize: 11
+                                        color: Color.mOnSurfaceVariant
+                                        opacity: 0.72
+                                    }
+                                }
+                            }
+
+                            Flow {
+                                width: parent.width
+                                spacing: 10
+
+                                Repeater {
+                                    model: [
+                                        { label: "Auto", value: "auto" },
+                                        { label: "Default", value: "default" },
+                                        { label: "SharePoint", value: "sharepoint" },
+                                        { label: "HiAnime", value: "hianime" },
+                                        { label: "YouTube", value: "youtube" }
+                                    ]
+
+                                    delegate: SettingChoiceButton {
+                                        text: modelData.label
+                                        active: anime?.preferredProvider === modelData.value
+                                        onClicked: if (anime) anime.setSetting("preferredProvider", modelData.value)
                                     }
                                 }
                             }

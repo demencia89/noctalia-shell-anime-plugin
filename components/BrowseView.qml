@@ -90,7 +90,7 @@ Item {
                         Keys.onEscapePressed: {
                             searchBar.visible = false
                             text = ""
-                            if (anime) anime.fetchPopular(true)
+                            if (anime) anime.fetchCurrentFeed(true)
                         }
                     }
 
@@ -132,7 +132,7 @@ Item {
                         if (searchField.text.trim().length > 0)
                             anime.searchAnime(searchField.text.trim(), true)
                         else
-                            anime.fetchPopular(true)
+                            anime.fetchCurrentFeed(true)
                     }
                 }
 
@@ -159,7 +159,7 @@ Item {
                             if (searchBar.visible) searchField.forceActiveFocus()
                             else {
                                 searchField.text = ""
-                                if (anime) anime.fetchPopular(true)
+                                if (anime) anime.fetchCurrentFeed(true)
                             }
                         }
                     }
@@ -242,10 +242,78 @@ Item {
             }
         }
 
+        Rectangle {
+            Layout.fillWidth: true
+            height: 44
+            color: "transparent"
+
+            Row {
+                anchors {
+                    left: parent.left
+                    verticalCenter: parent.verticalCenter
+                    leftMargin: 18
+                }
+                spacing: 8
+
+                Repeater {
+                    model: [
+                        { label: "Popular", value: "popular" },
+                        { label: "Recent", value: "latest" }
+                    ]
+
+                    delegate: Item {
+                        width: feedLabel.implicitWidth + 28
+                        height: 30
+
+                        readonly property bool active: (anime?.currentView === modelData.value)
+                            || (anime?.currentView === "search" && anime?.browseFeed === modelData.value)
+
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: 15
+                            color: active ? Color.mPrimary : Color.mSurface
+                            border.width: 1
+                            border.color: active
+                                ? Color.mPrimary
+                                : Qt.rgba(Color.mOutlineVariant.r, Color.mOutlineVariant.g, Color.mOutlineVariant.b, 0.5)
+                            Behavior on color { ColorAnimation { duration: 160 } }
+                        }
+
+                        Text {
+                            id: feedLabel
+                            anchors.centerIn: parent
+                            text: modelData.label
+                            font.pixelSize: 11
+                            font.bold: active
+                            font.letterSpacing: 0.4
+                            color: active ? Color.mOnPrimary : Color.mOnSurfaceVariant
+                            Behavior on color { ColorAnimation { duration: 160 } }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: {
+                                if (!anime) return
+                                searchBar.visible = false
+                                searchField.text = ""
+                                if (modelData.value === "latest")
+                                    anime.fetchLatest(true)
+                                else
+                                    anime.fetchPopular(true)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // ── Genre selector ────────────────────────────────────────────────────
         Rectangle {
             Layout.fillWidth: true
-            height: (anime?.genresList?.length ?? 0) > 0 ? 56 : 0
+            readonly property bool showGenres:
+                (anime?.genresList?.length ?? 0) > 0 &&
+                ((anime?.browseFeed ?? "popular") !== "latest" || (anime?.currentView === "search"))
+            height: showGenres ? 56 : 0
             color: "transparent"
             visible: height > 0
             clip: true
@@ -401,8 +469,30 @@ Item {
                 }
 
                 onContentYChanged: {
+                    if (anime) anime.setBrowseScroll(contentY)
                     if (contentY + height > contentHeight - cellHeight * 2)
                         if (anime) anime.fetchNextPage()
+                }
+
+                onVisibleChanged: {
+                    if (!visible || !anime) return
+                    Qt.callLater(function() {
+                        animeGrid.contentY = Math.min(
+                            anime.browseScrollY || 0,
+                            Math.max(0, animeGrid.contentHeight - animeGrid.height)
+                        )
+                    })
+                }
+
+                onContentHeightChanged: {
+                    if (!visible || !anime) return
+                    if ((anime.browseScrollY || 0) <= 0) return
+                    Qt.callLater(function() {
+                        animeGrid.contentY = Math.min(
+                            anime.browseScrollY || 0,
+                            Math.max(0, animeGrid.contentHeight - animeGrid.height)
+                        )
+                    })
                 }
 
                 delegate: Item {

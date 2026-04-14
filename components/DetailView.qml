@@ -21,8 +21,8 @@ Item {
         // ── Header ────────────────────────────────────────────────────────────
         Rectangle {
             Layout.fillWidth: true
-            height: 52
-            color: Color.mSurfaceVariant
+            height: 56
+            color: "transparent"
             z: 2
 
             Rectangle {
@@ -31,21 +31,29 @@ Item {
             }
 
             RowLayout {
-                anchors { fill: parent; leftMargin: 6; rightMargin: 10 }
-                spacing: 2
+                anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
+                spacing: 8
 
                 // Back button
                 Item {
-                    width: 44; height: 44
+                    width: 38; height: 38
 
                     Rectangle {
-                        anchors.centerIn: parent; width: 34; height: 34; radius: 17
-                        color: backArea.containsMouse ? Color.mSurface : "transparent"
+                        anchors.centerIn: parent
+                        width: 32
+                        height: 32
+                        radius: 16
+                        color: backArea.containsMouse ? Color.mPrimaryContainer : "transparent"
+                        border.width: backArea.containsMouse ? 1 : 0
+                        border.color: Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.25)
                         Behavior on color { ColorAnimation { duration: 130 } }
                     }
                     Text {
                         anchors.centerIn: parent
-                        text: "←"; font.pixelSize: 18; color: Color.mOnSurfaceVariant
+                        text: "←"
+                        font.pixelSize: 18
+                        color: backArea.containsMouse ? Color.mOnPrimaryContainer : Color.mOnSurfaceVariant
+                        Behavior on color { ColorAnimation { duration: 130 } }
                     }
                     MouseArea {
                         id: backArea; anchors.fill: parent; hoverEnabled: true
@@ -53,12 +61,29 @@ Item {
                     }
                 }
 
-                Text {
+                Rectangle {
                     Layout.fillWidth: true
-                    text: anime?.currentAnime
-                        ? (anime.currentAnime.englishName || anime.currentAnime.name || "")
-                        : ""
-                    font.pixelSize: 13; color: Color.mOnSurface; elide: Text.ElideRight
+                    implicitHeight: 38
+                    radius: 19
+                    color: Qt.rgba(Color.mSurface.r, Color.mSurface.g, Color.mSurface.b, 0.88)
+                    border.width: 1
+                    border.color: Qt.rgba(Color.mOutlineVariant.r, Color.mOutlineVariant.g, Color.mOutlineVariant.b, 0.4)
+
+                    Text {
+                        anchors {
+                            left: parent.left
+                            right: parent.right
+                            verticalCenter: parent.verticalCenter
+                            leftMargin: 14
+                            rightMargin: 14
+                        }
+                        text: anime?.currentAnime
+                            ? (anime.currentAnime.englishName || anime.currentAnime.name || "")
+                            : ""
+                        font.pixelSize: 13
+                        color: Color.mOnSurface
+                        elide: Text.ElideRight
+                    }
                 }
 
                 // Library button
@@ -338,6 +363,10 @@ Item {
                         !isWatched &&
                         (anime?.libraryVersion ?? 0) >= 0 &&
                         (anime?.hasEpisodeProgress(anime?.currentAnime?.id ?? "", modelData.number) ?? false)
+                    readonly property real progressRatio:
+                        (anime?.libraryVersion ?? 0) >= 0
+                        ? (anime?.getEpisodeProgressRatio(anime?.currentAnime?.id ?? "", modelData.number) ?? 0)
+                        : 0
 
                     color: isLastWatched
                         ? Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.07)
@@ -351,9 +380,31 @@ Item {
                         anchors {
                             bottom: parent.bottom
                             left: parent.left; right: parent.right
-                            leftMargin: 64; rightMargin: 16
+                            leftMargin: 64; rightMargin: 56
                         }
                         height: 1; color: Color.mOutlineVariant; opacity: 0.22
+                    }
+
+                    Rectangle {
+                        anchors {
+                            left: parent.left
+                            right: parent.right
+                            bottom: parent.bottom
+                            leftMargin: 64
+                            rightMargin: 56
+                            bottomMargin: 3
+                        }
+                        height: 3
+                        radius: 2
+                        color: Qt.rgba(Color.mOutlineVariant.r, Color.mOutlineVariant.g, Color.mOutlineVariant.b, 0.18)
+                        visible: hasProgress && progressRatio > 0
+
+                        Rectangle {
+                            width: parent.width * progressRatio
+                            height: parent.height
+                            radius: parent.radius
+                            color: Color.mTertiary
+                        }
                     }
 
                     RowLayout {
@@ -401,6 +452,52 @@ Item {
                                 : (epRowArea.containsMouse ? 0.9 : 0.35)
                             Behavior on opacity { NumberAnimation { duration: 120 } }
                             Behavior on color   { ColorAnimation  { duration: 120 } }
+                        }
+
+                        Item {
+                            width: 28
+                            height: 28
+                            Layout.alignment: Qt.AlignVCenter
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 14
+                                color: watchToggleArea.containsMouse
+                                    ? (isWatched ? Color.mPrimary : Color.mPrimaryContainer)
+                                    : Qt.rgba(Color.mSurface.r, Color.mSurface.g, Color.mSurface.b, 0.7)
+                                border.width: 1
+                                border.color: isWatched
+                                    ? Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.45)
+                                    : Qt.rgba(Color.mOutlineVariant.r, Color.mOutlineVariant.g, Color.mOutlineVariant.b, 0.35)
+                                Behavior on color { ColorAnimation { duration: 130 } }
+                            }
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: isWatched ? "✓" : "+"
+                                font.pixelSize: isWatched ? 12 : 14
+                                font.bold: true
+                                color: isWatched
+                                    ? (watchToggleArea.containsMouse ? Color.mOnPrimary : Color.mPrimary)
+                                    : (watchToggleArea.containsMouse ? Color.mOnPrimaryContainer : Color.mOnSurfaceVariant)
+                                Behavior on color { ColorAnimation { duration: 130 } }
+                            }
+
+                            MouseArea {
+                                id: watchToggleArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: function(mouse) {
+                                    mouse.accepted = true
+                                    if (!anime?.currentAnime) return
+                                    anime.toggleEpisodeWatched(
+                                        anime.currentAnime,
+                                        modelData.id,
+                                        modelData.number
+                                    )
+                                }
+                            }
                         }
                     }
 
