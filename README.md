@@ -4,12 +4,15 @@ Browse and track anime directly from your Noctalia bar. Streams episodes via `mp
 
 ## Features
 
-- **Browse tab** — Popular anime, search, sub/dub toggle, infinite scroll, and quick hover actions to add or remove shows from your library
-- **Library tab** — Saved shows with last-watched progress and direct remove controls on each card
-- **Detail view** — Full episode list with one-click mpv playback
-- **Progress tracking** — Resume partial episodes and automatically mark watched episodes
+- **Browse tab** — Popular and recent-release feeds, search, sub/dub toggle, infinite scroll, genre filters, and quick hover actions to add or remove shows from your library
+- **Library tab** — Saved shows with direct remove controls, progress bars, and remembered scroll position when returning from detail view
+- **Continue Watching rail** — In-progress anime are surfaced at the top of the library for quick resuming
+- **Detail view** — Full episode list with one-click mpv playback, per-episode watched/unwatched controls, and progress indicators
+- **Progress tracking** — Resume partial episodes, automatically mark watched episodes, and keep richer playback progress with position and duration
+- **Playback preferences** — Choose preferred stream quality and provider fallback order from the settings panel
+- **Navigation quality-of-life** — Browse and library grids restore your scroll position after opening and closing a show
 - **Adaptive styling** — Uses Noctalia theme roles so the plugin follows the active dynamic colorscheme
-- **Persistent state** — Library, layout preferences, mode, and progress saved in Noctalia plugin settings
+- **Persistent state** — Library, layout preferences, browse preferences, playback preferences, and progress saved in Noctalia plugin settings
 
 ## Requirements
 
@@ -38,11 +41,13 @@ Drop the `anime/` folder into your Noctalia plugins directory, then enable it in
 
 ## Settings
 
-| Key          | Default   | Description                                |
-|--------------|-----------|--------------------------------------------|
-| `mode`       | `sub`     | Default audio mode (`sub` or `dub`)        |
-| `panelSize`  | `medium`  | Drawer width preset (`small/medium/large`) |
-| `posterSize` | `medium`  | Grid density preset (`small/medium/large`) |
+| Key                 | Default   | Description                                                |
+|---------------------|-----------|------------------------------------------------------------|
+| `mode`              | `sub`     | Default audio mode (`sub` or `dub`)                        |
+| `panelSize`         | `medium`  | Drawer width preset (`small/medium/large`)                 |
+| `posterSize`        | `medium`  | Grid density preset (`small/medium/large`)                 |
+| `preferredQuality`  | `best`    | Preferred playback quality (`best/1080/720/480`)           |
+| `preferredProvider` | `auto`    | Preferred provider order (`auto/default/sharepoint/...`)   |
 
 ## Notes
 
@@ -51,3 +56,5 @@ Drop the `anime/` folder into your Noctalia plugins directory, then enable it in
 - Library data is stored in `~/.config/noctalia/plugins/anime/settings.json`.
 - Resume data is stored as per-episode text files under `~/.config/noctalia/plugins/anime/progress/`.
 - Browse and library cards use separate library action buttons, so adding or removing a show does not require opening its detail view.
+- Existing saved progress entries remain compatible; newer sessions store both playback position and duration so the UI can render actual progress bars.
+- Provider preference is best-effort. If the preferred source fails, the plugin falls back to the remaining known providers automatically.
