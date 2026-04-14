@@ -74,7 +74,19 @@ Item {
     // ── Currently playing ─────────────────────────────────────────────────────
     property string _playingShowId: ""
     property string _playingEpNum:  ""
-    property string _progressFile:  ""
+    property string _pendingEpisodeId: ""
+    property string _pendingProgressFile: ""
+    property string _activeShowId: ""
+    property string _activeEpNum: ""
+    property string _activeProgressFile: ""
+    property string _queuedUrl: ""
+    property string _queuedRef: ""
+    property string _queuedTitle: ""
+    property string _queuedShowId: ""
+    property string _queuedEpNum: ""
+    property string _queuedProgressFile: ""
+    property real _queuedStartPos: 0
+    property bool _launchQueued: false
 
     // ── Library ───────────────────────────────────────────────────────────────
     property bool libraryLoaded: false
@@ -247,6 +259,14 @@ Item {
         return (entry.episodeProgress || {})[String(epNum)] || 0
     }
 
+    function commitPendingEpisodeSelection() {
+        if (!currentAnime || !_playingShowId || !_playingEpNum) return
+        if (isInLibrary(_playingShowId))
+            updateLastWatched(_playingShowId, _pendingEpisodeId, _playingEpNum)
+        else
+            addToLibraryWithEpisode(currentAnime, _pendingEpisodeId, _playingEpNum)
+    }
+
     // ── MPV launch & progress tracking ───────────────────────────────────────
     property string _pendingUrl:   ""
     property string _pendingRef:   ""
@@ -258,13 +278,14 @@ Item {
         _pendingUrl   = url
         _pendingRef   = referer
         _pendingTitle = title
-        _progressFile = progressDir + "/" + _playingShowId + "-ep" + _playingEpNum + ".txt"
+        _pendingProgressFile = progressDir + "/" + _playingShowId + "-ep" + _playingEpNum + ".txt"
 
         // Read existing progress file if it exists (for resume)
-        // Use a shell one-liner so we handle missing file gracefully
         preReadProc.command = [
             "sh", "-c",
-            "test -f " + _progressFile + " && cat " + _progressFile + " || echo 'position=0'"
+            "test -f \"$1\" && cat \"$1\" || printf 'position=0\n'",
+            "sh",
+            _pendingProgressFile
         ]
         preReadProc._buf = ""
         if (preReadProc.running) preReadProc.running = false
@@ -294,39 +315,66 @@ Item {
         }
     }
 
-    function _doLaunchMpv(startPos) {
-        if (mpvProcess.running) mpvProcess.running = false
-
+    function _startMpvSession(showId, epNum, progressFile, startPos, url, referer, title) {
+        _activeShowId = showId
+        _activeEpNum = epNum
+        _activeProgressFile = progressFile
         var args = [
             "mpv", "--fs", "--force-window=yes",
-            "--title=" + (_pendingTitle || "Anime"),
+            "--title=" + (title || "Anime"),
             "--script=" + luaPath,
-            "--script-opts=progress_file=" + _progressFile,
+            "--script-opts=progress_file=" + progressFile,
         ]
         if (startPos > 5)
             args.push("--start=" + Math.floor(startPos))
-        if (_pendingRef && _pendingRef.length > 0)
-            args.push("--referrer=" + _pendingRef)
-        args.push(_pendingUrl)
+        if (referer && referer.length > 0)
+            args.push("--referrer=" + referer)
+        args.push(url)
 
         mpvProcess.command = args
         mpvProcess.running = true
+    }
+
+    function _doLaunchMpv(startPos) {
+        var showId = _playingShowId
+        var epNum = _playingEpNum
+        var progressFile = _pendingProgressFile
+        var url = _pendingUrl
+        var referer = _pendingRef
+        var title = _pendingTitle
+
+        if (mpvProcess.running) {
+            _queuedShowId = showId
+            _queuedEpNum = epNum
+            _queuedProgressFile = progressFile
+            _queuedUrl = url
+            _queuedRef = referer
+            _queuedTitle = title
+            _queuedStartPos = startPos
+            _launchQueued = true
+            mpvProcess.running = false
+            return
+        }
+
+        _startMpvSession(showId, epNum, progressFile, startPos, url, referer, title)
     }
 
     Process {
         id: mpvProcess
 
         onRunningChanged: {
-            if (running) return
+            if (running || !root._activeProgressFile) return
             // mpv exited — read the progress file
             postReadProc.command = [
                 "sh", "-c",
-                "test -f " + root._progressFile + " && cat " + root._progressFile + " || echo 'duration=0\nposition=0'"
+                "test -f \"$1\" && cat \"$1\" || printf 'duration=0\nposition=0\n'",
+                "sh",
+                root._activeProgressFile
             ]
             postReadProc._buf    = ""
-            postReadProc._showId = root._playingShowId
-            postReadProc._epNum  = root._playingEpNum
-            postReadProc._pfile  = root._progressFile
+            postReadProc._showId = root._activeShowId
+            postReadProc._epNum  = root._activeEpNum
+            postReadProc._pfile  = root._activeProgressFile
             if (postReadProc.running) postReadProc.running = false
             Qt.callLater(function() { postReadProc.running = true })
         }
@@ -361,6 +409,39 @@ Item {
                     // Partially watched — save position
                     root.saveEpisodeProgress(_showId, _epNum, pos)
                 }
+            }
+
+            root._activeShowId = ""
+            root._activeEpNum = ""
+            root._activeProgressFile = ""
+
+            if (root._launchQueued) {
+                var nextShowId = root._queuedShowId
+                var nextEpNum = root._queuedEpNum
+                var nextProgressFile = root._queuedProgressFile
+                var nextStartPos = root._queuedStartPos
+                var nextUrl = root._queuedUrl
+                var nextRef = root._queuedRef
+                var nextTitle = root._queuedTitle
+
+                root._launchQueued = false
+                root._queuedShowId = ""
+                root._queuedEpNum = ""
+                root._queuedProgressFile = ""
+                root._queuedStartPos = 0
+                root._queuedUrl = ""
+                root._queuedRef = ""
+                root._queuedTitle = ""
+
+                root._startMpvSession(
+                    nextShowId,
+                    nextEpNum,
+                    nextProgressFile,
+                    nextStartPos,
+                    nextUrl,
+                    nextRef,
+                    nextTitle
+                )
             }
         }
 
@@ -558,10 +639,11 @@ Item {
         if (detailProc.running) detailProc.running = false
     }
 
-    function fetchStreamLinks(showId, epNum, _quality) {
+    function fetchStreamLinks(showId, epId, epNum, _quality) {
         if (!currentAnime) return
         _playingShowId  = showId
         _playingEpNum   = String(epNum)
+        _pendingEpisodeId = String(epId || "")
         currentEpisode  = String(epNum)
         linksError      = ""
         selectedLink    = null
@@ -581,5 +663,6 @@ Item {
         selectedLink   = null
         linksError     = ""
         currentEpisode = ""
+        _pendingEpisodeId = ""
     }
 }

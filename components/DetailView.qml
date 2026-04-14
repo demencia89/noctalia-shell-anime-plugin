@@ -408,23 +408,9 @@ Item {
                         id: epRowArea; anchors.fill: parent; hoverEnabled: true
                         onClicked: {
                             if (!anime?.currentAnime) return
-                            if (!anime.isInLibrary(anime.currentAnime.id)) {
-                                // Not in library yet — add and record episode atomically
-                                anime.addToLibraryWithEpisode(
-                                    anime.currentAnime,
-                                    modelData.id,
-                                    modelData.number
-                                )
-                            } else {
-                                // Already in library — just update the episode
-                                anime.updateLastWatched(
-                                    anime.currentAnime.id,
-                                    modelData.id,
-                                    modelData.number
-                                )
-                            }
                             anime.fetchStreamLinks(
                                 anime.currentAnime.id,
+                                modelData.id,
                                 modelData.number,
                                 "best"
                             )
@@ -447,6 +433,7 @@ Item {
                 anime.clearStreamLinks()
                 return
             }
+            anime.commitPendingEpisodeSelection()
             var title = anime.currentAnime
                 ? (anime.currentAnime.englishName || anime.currentAnime.name)
                   + " — Ep." + anime.currentEpisode
