@@ -90,13 +90,20 @@ Item {
                 spacing: 8
 
                 Rectangle {
+                    id: libraryWordmark
                     visible: !librarySearchBar.visible
                     Layout.fillWidth: true
                     implicitHeight: 38
                     radius: 19
-                    color: Qt.rgba(Color.mSurface.r, Color.mSurface.g, Color.mSurface.b, 0.88)
+                    color: libraryTitleArea.containsMouse
+                        ? Qt.rgba(Color.mSurfaceVariant.r, Color.mSurfaceVariant.g, Color.mSurfaceVariant.b, 0.92)
+                        : Qt.rgba(Color.mSurface.r, Color.mSurface.g, Color.mSurface.b, 0.88)
                     border.width: 1
-                    border.color: Qt.rgba(Color.mOutlineVariant.r, Color.mOutlineVariant.g, Color.mOutlineVariant.b, 0.4)
+                    border.color: libraryTitleArea.containsMouse
+                        ? Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.28)
+                        : Qt.rgba(Color.mOutlineVariant.r, Color.mOutlineVariant.g, Color.mOutlineVariant.b, 0.4)
+                    Behavior on color { ColorAnimation { duration: 180 } }
+                    Behavior on border.color { ColorAnimation { duration: 180 } }
 
                     Row {
                         anchors {
@@ -117,12 +124,15 @@ Item {
                             font.pixelSize: 20
                             font.letterSpacing: 1
                             color: Color.mOnSurface
-                            opacity: 0.85
+                            opacity: libraryTitleArea.containsMouse ? 1 : 0.85
+                            Behavior on opacity { NumberAnimation { duration: 180 } }
                         }
                     }
 
                     MouseArea {
+                        id: libraryTitleArea
                         anchors.fill: parent
+                        hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: libraryView.openSearch()
                     }
@@ -177,17 +187,21 @@ Item {
                             width: 18
                             height: 18
                             radius: 9
-                            color: Color.mSurfaceVariant
+                            color: libraryClearArea.containsMouse ? Color.mPrimaryContainer : Color.mSurfaceVariant
+                            Behavior on color { ColorAnimation { duration: 140 } }
                         }
                         Text {
                             anchors.centerIn: parent
                             text: "✕"
-                            color: Color.mOnSurfaceVariant
+                            color: libraryClearArea.containsMouse ? Color.mOnPrimaryContainer : Color.mOnSurfaceVariant
                             font.pixelSize: 9
                             font.bold: true
+                            Behavior on color { ColorAnimation { duration: 140 } }
                         }
                         MouseArea {
+                            id: libraryClearArea
                             anchors.fill: parent
+                            hoverEnabled: true
                             onClicked: librarySearchField.text = ""
                         }
                     }
@@ -217,18 +231,29 @@ Item {
                     Rectangle {
                         anchors.centerIn: parent
                         width: 32; height: 32; radius: 16
-                        color: librarySearchBar.visible ? Color.mPrimaryContainer : "transparent"
+                        color: (librarySearchBar.visible || librarySearchToggleArea.containsMouse)
+                            ? Color.mPrimaryContainer
+                            : "transparent"
+                        border.width: librarySearchToggleArea.containsMouse ? 1 : 0
+                        border.color: Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.25)
+                        scale: librarySearchToggleArea.containsMouse ? 1.06 : 1.0
                         Behavior on color { ColorAnimation { duration: 180 } }
+                        Behavior on border.width { NumberAnimation { duration: 180 } }
+                        Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
                     }
                     Text {
                         anchors.centerIn: parent
                         text: "⌕"; font.pixelSize: 18
-                        color: librarySearchBar.visible ? Color.mOnPrimaryContainer : Color.mOnSurfaceVariant
+                        color: (librarySearchBar.visible || librarySearchToggleArea.containsMouse)
+                            ? Color.mOnPrimaryContainer
+                            : Color.mOnSurfaceVariant
                         Behavior on color { ColorAnimation { duration: 180 } }
                     }
                     MouseArea {
+                        id: librarySearchToggleArea
                         anchors.fill: parent
                         z: 1
+                        hoverEnabled: true
                         onClicked: {
                             librarySearchBar.visible = !librarySearchBar.visible
                             if (librarySearchBar.visible) librarySearchField.forceActiveFocus()
@@ -248,7 +273,10 @@ Item {
                             : "transparent"
                         border.width: settingsArea.containsMouse ? 1 : 0
                         border.color: Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.25)
+                        scale: settingsArea.containsMouse ? 1.06 : 1.0
                         Behavior on color { ColorAnimation { duration: 180 } }
+                        Behavior on border.width { NumberAnimation { duration: 180 } }
+                        Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
                     }
                     Text {
                         anchors.centerIn: parent
@@ -631,8 +659,7 @@ Item {
                                 z: 3
 
                                 Behavior on color { ColorAnimation { duration: 140 } }
-                                ToolTip.visible: libraryActionArea.containsMouse
-                                ToolTip.text: "Remove from library"
+                                Behavior on border.color { ColorAnimation { duration: 140 } }
 
                                 NIcon {
                                     anchors.centerIn: parent
@@ -664,6 +691,13 @@ Item {
                                     cursorShape: Qt.PointingHandCursor
                                     acceptedButtons: Qt.LeftButton
                                     onClicked: if (anime) anime.removeFromLibrary(entry.id)
+                                }
+
+                                StyledToolTip {
+                                    target: libraryActionArea
+                                    shown: libraryActionArea.containsMouse
+                                    above: false
+                                    text: "Remove from library"
                                 }
                             }
 

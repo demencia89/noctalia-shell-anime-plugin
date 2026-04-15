@@ -29,7 +29,13 @@ Item {
     property int tabIndex:    1
     property int browseStack: 0
     property int libraryStack: 0
+    property int feedStack: 0
     property bool settingsOpen: false
+
+    onTabIndexChanged: {
+        if (tabIndex === 2 && anime)
+            anime.fetchFollowingFeed(false)
+    }
 
     Rectangle {
         id: panelContainer
@@ -111,6 +117,35 @@ Item {
                             }
                         }
                     }
+
+                    // Feed tab
+                    Item {
+                        FeedView {
+                            anchors.fill: parent
+                            pluginApi: root.pluginApi
+                            visible: root.feedStack === 0
+                            opacity: visible ? 1 : 0
+                            Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+
+                            onAnimeSelected: function(show, nextEpisode) {
+                                if (root.anime) root.anime.openAnimeDetail(show, nextEpisode)
+                                root.feedStack = 1
+                            }
+                        }
+
+                        DetailView {
+                            anchors.fill: parent
+                            pluginApi: root.pluginApi
+                            visible: root.feedStack === 1
+                            opacity: visible ? 1 : 0
+                            Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+
+                            onBackRequested: {
+                                root.feedStack = 0
+                                if (root.anime) root.anime.clearDetail()
+                            }
+                        }
+                    }
                 }
 
                 ShaderEffectSource {
@@ -170,11 +205,12 @@ Item {
                     Repeater {
                         model: [
                             { label: "Browse",   icon: "⊞" },
-                            { label: "Library",  icon: "⊟" }
+                            { label: "Library",  icon: "⊟" },
+                            { label: "Feed",     icon: "◉" }
                         ]
 
                         delegate: Item {
-                            width:  panelContainer.width / 2
+                            width:  panelContainer.width / 3
                             height: parent.height
 
                             readonly property bool active: !root.settingsOpen && root.tabIndex === index
@@ -182,7 +218,7 @@ Item {
                             Rectangle {
                                 anchors.fill: parent
                                 color: tabArea.containsMouse && !active
-                                    ? Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.05)
+                                    ? Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.12)
                                     : "transparent"
                                 Behavior on color { ColorAnimation { duration: 120 } }
                             }
@@ -195,18 +231,24 @@ Item {
                                     anchors.horizontalCenter: parent.horizontalCenter
                                     text: modelData.icon
                                     font.pixelSize: 13
-                                    color: active ? Color.mPrimary : Color.mOnSurfaceVariant
-                                    opacity: active ? 1 : 0.5
+                                    color: active
+                                        ? Color.mPrimary
+                                        : (tabArea.containsMouse ? Color.mPrimary : Color.mOnSurfaceVariant)
+                                    opacity: active || tabArea.containsMouse ? 1 : 0.5
                                     Behavior on color { ColorAnimation { duration: 180 } }
+                                    Behavior on opacity { NumberAnimation { duration: 180 } }
                                 }
                                 Text {
                                     anchors.horizontalCenter: parent.horizontalCenter
                                     text: modelData.label
                                     font.pixelSize: 10
                                     font.letterSpacing: 0.6
-                                    color: active ? Color.mPrimary : Color.mOnSurfaceVariant
-                                    opacity: active ? 1 : 0.5
+                                    color: active
+                                        ? Color.mPrimary
+                                        : (tabArea.containsMouse ? Color.mPrimary : Color.mOnSurfaceVariant)
+                                    opacity: active || tabArea.containsMouse ? 1 : 0.5
                                     Behavior on color { ColorAnimation { duration: 180 } }
+                                    Behavior on opacity { NumberAnimation { duration: 180 } }
                                 }
                             }
 
@@ -225,6 +267,8 @@ Item {
                                 onClicked: {
                                     root.settingsOpen = false
                                     root.tabIndex = index
+                                    if (index === 2 && root.anime)
+                                        root.anime.fetchFollowingFeed(false)
                                 }
                             }
                         }

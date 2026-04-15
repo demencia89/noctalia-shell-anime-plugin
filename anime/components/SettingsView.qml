@@ -17,28 +17,39 @@ Item {
         property bool active: false
 
         flat: true
+        hoverEnabled: true
         implicitWidth: 92
         implicitHeight: 38
 
         background: Rectangle {
             radius: 19
-            color: choiceButton.active ? Color.mPrimary : Color.mSurface
+            color: choiceButton.active
+                ? Color.mPrimary
+                : (choiceButton.hovered ? Color.mPrimaryContainer : Color.mSurface)
             border.width: 1
             border.color: choiceButton.active
                 ? Color.mPrimary
-                : Qt.rgba(Color.mOutlineVariant.r, Color.mOutlineVariant.g, Color.mOutlineVariant.b, 0.55)
-            opacity: !choiceButton.enabled ? 0.45 : (choiceButton.active ? 1 : 0.92)
+                : (choiceButton.hovered
+                    ? Color.mPrimary
+                    : Qt.rgba(Color.mOutlineVariant.r, Color.mOutlineVariant.g, Color.mOutlineVariant.b, 0.55))
+            opacity: !choiceButton.enabled ? 0.45 : (choiceButton.active || choiceButton.hovered ? 1 : 0.92)
+            Behavior on color { ColorAnimation { duration: 160 } }
+            Behavior on border.color { ColorAnimation { duration: 160 } }
+            Behavior on opacity { NumberAnimation { duration: 160 } }
         }
 
         contentItem: Text {
             text: choiceButton.text
-            color: choiceButton.active ? Color.mOnPrimary : Color.mOnSurface
+            color: choiceButton.active
+                ? Color.mOnPrimary
+                : (choiceButton.hovered ? Color.mOnPrimaryContainer : Color.mOnSurface)
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             font.pixelSize: 12
             font.bold: choiceButton.active
             font.letterSpacing: 0.3
-            opacity: choiceButton.enabled ? 1 : 0.5
+            opacity: choiceButton.enabled ? (choiceButton.hovered || choiceButton.active ? 1 : 0.86) : 0.5
+            Behavior on opacity { NumberAnimation { duration: 160 } }
         }
     }
 
@@ -93,6 +104,10 @@ Item {
                         color: backArea.containsMouse ? Color.mSurface : "transparent"
                         border.width: 1
                         border.color: Qt.rgba(Color.mOutlineVariant.r, Color.mOutlineVariant.g, Color.mOutlineVariant.b, 0.45)
+                        scale: backArea.containsMouse ? 1.06 : 1.0
+                        Behavior on color { ColorAnimation { duration: 180 } }
+                        Behavior on border.color { ColorAnimation { duration: 180 } }
+                        Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
                     }
 
                     Text {
@@ -100,6 +115,8 @@ Item {
                         text: "←"
                         font.pixelSize: 18
                         color: Color.mOnSurfaceVariant
+                        opacity: backArea.containsMouse ? 1 : 0.82
+                        Behavior on opacity { NumberAnimation { duration: 180 } }
                     }
 
                     MouseArea {
@@ -203,7 +220,7 @@ Item {
 
                             Text {
                                 width: parent.width
-                                text: "Adjust the drawer width, poster density, and playback defaults so browsing feels right on your screen."
+                                text: "Adjust the drawer width, poster density, and playback provider so browsing feels right on your screen."
                                 wrapMode: Text.Wrap
                                 lineHeight: 1.35
                                 font.pixelSize: 11
@@ -350,79 +367,6 @@ Item {
                                         active: anime?.posterSize === modelData.value
                                         enabled: !(anime?.panelSize === "small" && modelData.value === "small")
                                         onClicked: if (anime) anime.setSetting("posterSize", modelData.value)
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Rectangle {
-                        width: parent.width
-                        radius: 20
-                        color: Qt.rgba(Color.mSurface.r, Color.mSurface.g, Color.mSurface.b, 0.86)
-                        border.width: 1
-                        border.color: Qt.rgba(Color.mOutlineVariant.r, Color.mOutlineVariant.g, Color.mOutlineVariant.b, 0.4)
-                        implicitHeight: qualitySection.implicitHeight + 32
-
-                        Column {
-                            id: qualitySection
-                            anchors.fill: parent
-                            anchors.margins: 16
-                            spacing: 12
-
-                            Row {
-                                spacing: 10
-
-                                Rectangle {
-                                    width: 28
-                                    height: 28
-                                    radius: 14
-                                    color: Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.12)
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: "HD"
-                                        font.pixelSize: 10
-                                        font.bold: true
-                                        color: Color.mPrimary
-                                    }
-                                }
-
-                                Column {
-                                    spacing: 2
-
-                                    Text {
-                                        text: "Preferred Quality"
-                                        font.pixelSize: 14
-                                        font.bold: true
-                                        color: Color.mOnSurface
-                                    }
-
-                                    Text {
-                                        text: "Choose which stream quality to prefer when multiple MP4 options exist"
-                                        font.pixelSize: 11
-                                        color: Color.mOnSurfaceVariant
-                                        opacity: 0.72
-                                    }
-                                }
-                            }
-
-                            Flow {
-                                width: parent.width
-                                spacing: 10
-
-                                Repeater {
-                                    model: [
-                                        { label: "Best", value: "best" },
-                                        { label: "1080p", value: "1080" },
-                                        { label: "720p", value: "720" },
-                                        { label: "480p", value: "480" }
-                                    ]
-
-                                    delegate: SettingChoiceButton {
-                                        text: modelData.label
-                                        active: anime?.preferredQuality === modelData.value
-                                        onClicked: if (anime) anime.setSetting("preferredQuality", modelData.value)
                                     }
                                 }
                             }

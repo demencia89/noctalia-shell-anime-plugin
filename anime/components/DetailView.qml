@@ -17,21 +17,23 @@ Item {
     readonly property var _nextEpisode:
         anime?.currentAnime ? anime.getNextUnwatchedEpisode(anime.currentAnime) : null
 
-    function centerLastWatchedEpisode(force) {
+    function centerPreferredEpisode(force) {
         if (!anime?.currentAnime || !epList.visible) return
 
         var entry = anime.getLibraryEntry(anime.currentAnime.id)
         var lastEpNum = entry?.lastWatchedEpNum || ""
+        var targetEpNum = anime?.detailFocusEpisodeNum || ""
         var episodes = anime.currentAnime.episodes || []
-        if (!lastEpNum || episodes.length === 0) return
+        if ((!lastEpNum && !targetEpNum) || episodes.length === 0) return
 
-        var key = String(anime.currentAnime.id || "") + ":" + String(lastEpNum) + ":" + String(episodes.length)
+        var focusEpNum = targetEpNum || lastEpNum
+        var key = String(anime.currentAnime.id || "") + ":" + String(focusEpNum) + ":" + String(episodes.length)
         if (!force && _lastCenteredEpisodeKey === key)
             return
 
         var index = -1
         for (var i = 0; i < episodes.length; i++) {
-            if (String(episodes[i].number) === String(lastEpNum)) {
+            if (String(episodes[i].number) === String(focusEpNum)) {
                 index = i
                 break
             }
@@ -43,6 +45,12 @@ Item {
             if (!epList.visible || epList.count <= index) return
             epList.positionViewAtIndex(index, ListView.Center)
         })
+    }
+
+    function _streamTitle() {
+        return anime?.currentAnime
+            ? (anime.currentAnime.englishName || anime.currentAnime.name || "")
+            : ""
     }
 
     ColumnLayout {
@@ -68,26 +76,31 @@ Item {
                 // Back button
                 Item {
                     width: 38; height: 38
+                    readonly property bool hovered: backHover.hovered
 
                     Rectangle {
                         anchors.centerIn: parent
                         width: 32
                         height: 32
                         radius: 16
-                        color: backArea.containsMouse ? Color.mPrimaryContainer : "transparent"
-                        border.width: backArea.containsMouse ? 1 : 0
+                        color: parent.hovered ? Color.mPrimaryContainer : "transparent"
+                        border.width: parent.hovered ? 1 : 0
                         border.color: Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.25)
+                        scale: parent.hovered ? 1.06 : 1.0
                         Behavior on color { ColorAnimation { duration: 130 } }
+                        Behavior on border.width { NumberAnimation { duration: 130 } }
+                        Behavior on scale { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
                     }
                     Text {
                         anchors.centerIn: parent
                         text: "←"
                         font.pixelSize: 18
-                        color: backArea.containsMouse ? Color.mOnPrimaryContainer : Color.mOnSurfaceVariant
+                        color: parent.hovered ? Color.mOnPrimaryContainer : Color.mOnSurfaceVariant
                         Behavior on color { ColorAnimation { duration: 130 } }
                     }
+                    HoverHandler { id: backHover }
                     MouseArea {
-                        id: backArea; anchors.fill: parent; hoverEnabled: true
+                        id: backArea; anchors.fill: parent
                         onClicked: detailView.backRequested()
                     }
                 }
@@ -124,10 +137,11 @@ Item {
 
                     Rectangle {
                         anchors.fill: parent; radius: height / 2
-                        color: nextArea.containsMouse ? Color.mPrimary : Color.mPrimaryContainer
-                        border.color: Color.mPrimary
+                        color: nextArea.containsMouse ? Color.mPrimaryContainer : Color.mSurface
+                        border.color: nextArea.containsMouse ? Color.mPrimary : Color.mOutlineVariant
                         border.width: 1
                         Behavior on color { ColorAnimation { duration: 180 } }
+                        Behavior on border.color { ColorAnimation { duration: 180 } }
                     }
                     Row {
                         anchors.centerIn: parent; spacing: 6
@@ -136,7 +150,7 @@ Item {
                             anchors.verticalCenter: parent.verticalCenter
                             text: "▶"
                             font.pixelSize: 10; font.bold: true
-                            color: nextArea.containsMouse ? Color.mOnPrimary : Color.mOnPrimaryContainer
+                            color: nextArea.containsMouse ? Color.mOnPrimaryContainer : Color.mOnSurfaceVariant
                         }
                         Text {
                             id: nextBtnLabel
@@ -145,7 +159,7 @@ Item {
                                 ? "Next Ep. " + detailView._nextEpisode.number
                                 : "Next"
                             font.pixelSize: 11; font.letterSpacing: 0.3
-                            color: nextArea.containsMouse ? Color.mOnPrimary : Color.mOnPrimaryContainer
+                            color: nextArea.containsMouse ? Color.mOnPrimaryContainer : Color.mOnSurfaceVariant
                         }
                     }
                     MouseArea {
@@ -166,10 +180,13 @@ Item {
 
                     Rectangle {
                         anchors.fill: parent; radius: height / 2
-                        color: detailView._inLibrary ? Color.mPrimaryContainer : Color.mSurface
-                        border.color: detailView._inLibrary ? Color.mPrimary : Color.mOutlineVariant
+                        color: detailView._inLibrary
+                            ? (libraryArea.containsMouse ? Color.mPrimary : Color.mPrimaryContainer)
+                            : (libraryArea.containsMouse ? Color.mPrimaryContainer : Color.mSurface)
+                        border.color: detailView._inLibrary || libraryArea.containsMouse ? Color.mPrimary : Color.mOutlineVariant
                         border.width: 1
                         Behavior on color { ColorAnimation { duration: 180 } }
+                        Behavior on border.color { ColorAnimation { duration: 180 } }
                     }
                     Row {
                         anchors.centerIn: parent; spacing: 5
@@ -178,18 +195,27 @@ Item {
                             anchors.verticalCenter: parent.verticalCenter
                             text: detailView._inLibrary ? "✓" : "+"
                             font.pixelSize: 11; font.bold: true
-                            color: detailView._inLibrary ? Color.mOnPrimaryContainer : Color.mOnSurfaceVariant
+                            color: detailView._inLibrary
+                                ? (libraryArea.containsMouse ? Color.mOnPrimary : Color.mOnPrimaryContainer)
+                                : (libraryArea.containsMouse ? Color.mOnPrimaryContainer : Color.mOnSurfaceVariant)
+                            Behavior on color { ColorAnimation { duration: 180 } }
                         }
                         Text {
                             id: libBtnLabel
                             anchors.verticalCenter: parent.verticalCenter
                             text: "Library"
                             font.pixelSize: 11; font.letterSpacing: 0.3
-                            color: detailView._inLibrary ? Color.mOnPrimaryContainer : Color.mOnSurfaceVariant
+                            color: detailView._inLibrary
+                                ? (libraryArea.containsMouse ? Color.mOnPrimary : Color.mOnPrimaryContainer)
+                                : (libraryArea.containsMouse ? Color.mOnPrimaryContainer : Color.mOnSurfaceVariant)
+                            Behavior on color { ColorAnimation { duration: 180 } }
                         }
                     }
                     MouseArea {
+                        id: libraryArea
                         anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             if (!anime?.currentAnime) return
                             if (detailView._inLibrary)
@@ -285,6 +311,8 @@ Item {
                         color: catchUpArea.containsMouse ? Color.mPrimaryContainer : Color.mSurface
                         border.color: catchUpArea.containsMouse ? Color.mPrimary : Color.mOutlineVariant
                         border.width: 1
+                        Behavior on color { ColorAnimation { duration: 160 } }
+                        Behavior on border.color { ColorAnimation { duration: 160 } }
 
                         Text {
                             id: catchUpText
@@ -293,6 +321,7 @@ Item {
                             font.pixelSize: 9
                             font.letterSpacing: 0.6
                             color: catchUpArea.containsMouse ? Color.mOnPrimaryContainer : Color.mOnSurfaceVariant
+                            Behavior on color { ColorAnimation { duration: 160 } }
                         }
 
                         MouseArea {
@@ -311,6 +340,7 @@ Item {
                             }
                         }
                     }
+
                 }
             }
 
@@ -456,27 +486,88 @@ Item {
                 }
             }
 
+            Rectangle {
+                anchors.fill: parent
+                color: Qt.rgba(Color.mSurface.r, Color.mSurface.g, Color.mSurface.b, 0.52)
+                visible: anime?.isLaunchingPlayer ?? false; z: 6
+
+                Column {
+                    anchors.centerIn: parent; spacing: 12
+
+                    Rectangle {
+                        width: 24; height: 24; radius: 12
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        color: "transparent"; border.color: Color.mPrimary; border.width: 2
+                        RotationAnimator on rotation {
+                            from: 0; to: 360; duration: 760
+                            loops: Animation.Infinite; running: parent.visible
+                            easing.type: Easing.Linear
+                        }
+                    }
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: "opening player"
+                        color: Color.mOnSurfaceVariant
+                        font.pixelSize: 11; font.letterSpacing: 2; opacity: 0.8
+                    }
+                }
+            }
+
             // Error toast
             Rectangle {
                 anchors {
                     bottom: parent.bottom
                     horizontalCenter: parent.horizontalCenter
-                    bottomMargin: (anime?.linksError?.length ?? 0) > 0 ? 56 : 12
+                    bottomMargin: ((anime?.linksError?.length ?? 0) > 0
+                        || (anime?.playbackError?.length ?? 0) > 0) ? 56 : 12
                 }
                 height: 36
                 radius: 18
-                width: detailErrText.implicitWidth + 28
+                width: Math.min(parent.width - 32, detailErrText.implicitWidth + 28)
                 color: Color.mErrorContainer
                 visible: (anime?.detailError?.length ?? 0) > 0 && !(anime?.isFetchingDetail ?? false)
                 z: 7
 
                 Text {
                     id: detailErrText
-                    anchors.centerIn: parent
+                    anchors {
+                        fill: parent
+                        leftMargin: 14
+                        rightMargin: 14
+                    }
                     text: anime?.detailError ?? ""
                     font.pixelSize: 11
                     color: Color.mOnErrorContainer
                     elide: Text.ElideRight
+                    verticalAlignment: Text.AlignVCenter
+                    horizontalAlignment: Text.AlignHCenter
+                }
+            }
+
+            Rectangle {
+                anchors {
+                    bottom: parent.bottom; horizontalCenter: parent.horizontalCenter
+                    bottomMargin: (anime?.playbackError?.length ?? 0) > 0 ? 56 : 12
+                }
+                height: 36; radius: 18
+                width: Math.min(parent.width - 32, linksErrText.implicitWidth + 28)
+                color: Color.mErrorContainer
+                visible: (anime?.linksError?.length ?? 0) > 0 && !(anime?.isFetchingLinks ?? false)
+                z: 7
+
+                Text {
+                    id: linksErrText
+                    anchors {
+                        fill: parent
+                        leftMargin: 14
+                        rightMargin: 14
+                    }
+                    text: anime?.linksError ?? ""
+                    font.pixelSize: 11
+                    color: Color.mOnErrorContainer
+                    elide: Text.ElideRight
+                    verticalAlignment: Text.AlignVCenter
+                    horizontalAlignment: Text.AlignHCenter
                 }
             }
 
@@ -486,15 +577,24 @@ Item {
                     bottomMargin: 12
                 }
                 height: 36; radius: 18
-                width: linksErrText.implicitWidth + 28
+                width: Math.min(parent.width - 32, playbackErrText.implicitWidth + 28)
                 color: Color.mErrorContainer
-                visible: (anime?.linksError?.length ?? 0) > 0 && !(anime?.isFetchingLinks ?? false)
+                visible: (anime?.playbackError?.length ?? 0) > 0 && !(anime?.isLaunchingPlayer ?? false)
                 z: 7
 
                 Text {
-                    id: linksErrText; anchors.centerIn: parent
-                    text: anime?.linksError ?? ""
-                    font.pixelSize: 11; color: Color.mOnErrorContainer; elide: Text.ElideRight
+                    id: playbackErrText
+                    anchors {
+                        fill: parent
+                        leftMargin: 14
+                        rightMargin: 14
+                    }
+                    text: anime?.playbackError ?? ""
+                    font.pixelSize: 11
+                    color: Color.mOnErrorContainer
+                    elide: Text.ElideRight
+                    verticalAlignment: Text.AlignVCenter
+                    horizontalAlignment: Text.AlignHCenter
                 }
             }
 
@@ -504,9 +604,9 @@ Item {
                 boundsBehavior: Flickable.StopAtBounds
                 model: anime?.currentAnime?.episodes ?? []
 
-                onModelChanged: detailView.centerLastWatchedEpisode(false)
-                onVisibleChanged: if (visible) detailView.centerLastWatchedEpisode(true)
-                onContentHeightChanged: detailView.centerLastWatchedEpisode(false)
+                onModelChanged: detailView.centerPreferredEpisode(false)
+                onVisibleChanged: if (visible) detailView.centerPreferredEpisode(true)
+                onContentHeightChanged: detailView.centerPreferredEpisode(false)
 
                 ScrollBar.vertical: ScrollBar {
                     policy: ScrollBar.AsNeeded
@@ -642,6 +742,7 @@ Item {
                                     ? Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.45)
                                     : Qt.rgba(Color.mOutlineVariant.r, Color.mOutlineVariant.g, Color.mOutlineVariant.b, 0.35)
                                 Behavior on color { ColorAnimation { duration: 130 } }
+                                Behavior on border.color { ColorAnimation { duration: 130 } }
                             }
 
                             Text {
@@ -685,8 +786,7 @@ Item {
                             anime.fetchStreamLinks(
                                 anime.currentAnime.id,
                                 modelData.id,
-                                modelData.number,
-                                "best"
+                                modelData.number
                             )
                         }
                     }
@@ -702,7 +802,7 @@ Item {
 
         function onCurrentAnimeChanged() {
             detailView._lastCenteredEpisodeKey = ""
-            detailView.centerLastWatchedEpisode(true)
+            detailView.centerPreferredEpisode(true)
         }
 
         function onSelectedLinkChanged() {
@@ -713,12 +813,18 @@ Item {
                 return
             }
             anime.commitPendingEpisodeSelection()
-            var title = anime.currentAnime
-                ? (anime.currentAnime.englishName || anime.currentAnime.name)
-                  + " — Ep." + anime.currentEpisode
-                : ""
-            if (anime) anime.playWithMpv(lnk.url, lnk.referer, title)
+            var title = detailView._streamTitle()
+            if (title.length > 0)
+                title += " — Ep." + anime.currentEpisode
+            anime.playWithMpv(
+                lnk.url,
+                lnk.referer || "",
+                title,
+                lnk.http_headers || ({}),
+                lnk.type || ""
+            )
             anime.clearStreamLinks()
         }
+
     }
 }

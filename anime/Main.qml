@@ -29,6 +29,10 @@ Item {
         _runtimePath("progress.lua")
     readonly property string progressDir:
         _pathJoin(pluginApi?.pluginDir ?? "", "progress")
+    readonly property string feedLibraryPath:
+        _pathJoin(pluginApi?.pluginDir ?? "", "anime-library.json")
+    readonly property string feedCachePath:
+        _pathJoin(pluginApi?.pluginDir ?? "", "anime-feed-cache.json")
 
     // ── Settings ──────────────────────────────────────────────────────────────
     property string currentMode:
@@ -38,7 +42,6 @@ Item {
 
     property string panelSize:  pluginApi?.pluginSettings?.panelSize  || "medium"
     property string posterSize: pluginApi?.pluginSettings?.posterSize || "medium"
-    property string preferredQuality: pluginApi?.pluginSettings?.preferredQuality || "best"
     property string preferredProvider: pluginApi?.pluginSettings?.preferredProvider || "auto"
     property var    browseCache: ({})
     property var    detailCache: ({})
@@ -67,6 +70,28 @@ Item {
         return String(showId || "") + "\u241f" + String(mode || "")
     }
 
+    function _formatPlaybackError(stderrTail) {
+        var text = String(stderrTail || "").trim()
+        if (!text)
+            return "Playback failed: no playable stream was opened for this episode."
+        if ((text === "Exiting... (Errors when loading file)" || text === "errors while loading file")
+                && _mpvLastMeaningfulError.length > 0)
+            text = _mpvLastMeaningfulError
+        if (text.indexOf("HTTP error 403") !== -1 || text.indexOf("403 Forbidden") !== -1)
+            return "Playback failed: the provider rejected this stream."
+        if (text.indexOf("HTTP error 404") !== -1 || text.indexOf("404 Not Found") !== -1)
+            return "Playback failed: this stream is no longer available."
+        if (text.indexOf("Failed to open") !== -1)
+            return "Playback failed: mpv could not open the selected stream."
+        if (text.indexOf("Errors when loading file") !== -1 && _mpvLastMeaningfulError.length > 0)
+            text = _mpvLastMeaningfulError
+        if (text.indexOf("Certificate verification failed") !== -1)
+            return "Playback failed: the stream provider certificate could not be verified."
+        if (text.length > 120)
+            text = text.substring(0, 117) + "..."
+        return "Playback failed: " + text
+    }
+
     function _normaliseEpisodeList(episodes) {
         return (episodes || []).map(function(ep) {
             return { id: ep.id, number: ep.number }
@@ -77,7 +102,6 @@ Item {
 
     function setSetting(key, val) {
         if (key === "mode") currentMode = val
-        if (key === "preferredQuality") preferredQuality = val
         if (key === "preferredProvider") preferredProvider = val
 
         if (key === "panelSize") {
@@ -100,6 +124,7 @@ Item {
         if (currentMode === mode) return
 
         setSetting("mode", mode)
+        feedLastFetchedAt = 0
 
         if (currentAnime)
             fetchAnimeDetail(currentAnime)
@@ -124,17 +149,28 @@ Item {
     property bool   _hasMore:        true
     property real   browseScrollY:   0
 
+    // ── Feed state ────────────────────────────────────────────────────────────
+    property var    feedList:        []
+    property bool   isFetchingFeed:  false
+    property string feedError:       ""
+    property double feedLastFetchedAt: 0
+    property int    feedCooldownMs:  300000
+
     // ── Library view state ───────────────────────────────────────────────────
     property real libraryScrollY: 0
 
     // ── Detail state ──────────────────────────────────────────────────────────
     property var  currentAnime:     null
     property bool isFetchingDetail: false
+    property string detailFocusEpisodeNum: ""
+    property string pendingAutoPlayShowId: ""
 
     // ── Stream state ──────────────────────────────────────────────────────────
     property var    selectedLink:    null
     property bool   isFetchingLinks: false
     property string linksError:      ""
+    property bool   isLaunchingPlayer: false
+    property string playbackError:   ""
     property string currentEpisode:  ""
     property string detailError:     ""
 
@@ -149,11 +185,16 @@ Item {
     property string _queuedUrl: ""
     property string _queuedRef: ""
     property string _queuedTitle: ""
+    property string _queuedType: ""
+    property var    _queuedHeaders: ({})
     property string _queuedShowId: ""
     property string _queuedEpNum: ""
     property string _queuedProgressFile: ""
     property real _queuedStartPos: 0
     property bool _launchQueued: false
+    property double _mpvLaunchStartedAt: 0
+    property string _mpvStderrTail: ""
+    property string _mpvLastMeaningfulError: ""
 
     // ── Library ───────────────────────────────────────────────────────────────
     property bool libraryLoaded: false
@@ -183,6 +224,7 @@ Item {
         if (!pluginApi) return
         pluginApi.pluginSettings.library = libraryList
         pluginApi.saveSettings()
+        feedLastFetchedAt = 0
         libraryVersion++  // trigger reactive re-evaluation in views
     }
 
@@ -191,6 +233,7 @@ Item {
         var raw = pluginApi.pluginSettings?.library
         libraryList = (raw && Array.isArray(raw)) ? raw : []
         libraryLoaded = true
+        feedLastFetchedAt = 0
         libraryVersion++
     }
 
@@ -517,7 +560,7 @@ Item {
     function playNextUnwatched(show) {
         var nextEpisode = getNextUnwatchedEpisode(show)
         if (!show || !nextEpisode) return
-        fetchStreamLinks(show.id, nextEpisode.id, nextEpisode.number, preferredQuality)
+        fetchStreamLinks(show.id, nextEpisode.id, nextEpisode.number)
     }
 
     function commitPendingEpisodeSelection() {
@@ -540,13 +583,19 @@ Item {
     property string _pendingUrl:   ""
     property string _pendingRef:   ""
     property string _pendingTitle: ""
+    property string _pendingType:  ""
+    property var    _pendingHeaders: ({})
 
     // Step 1: called from DetailView Connections
-    function playWithMpv(url, referer, title) {
+    function playWithMpv(url, referer, title, headers, mediaType) {
         if (!url || url.length === 0) return
+        playbackError = ""
+        isLaunchingPlayer = true
         _pendingUrl   = url
         _pendingRef   = referer
         _pendingTitle = title
+        _pendingType  = mediaType || ""
+        _pendingHeaders = headers || ({})
         _pendingProgressFile = progressDir + "/" + _playingShowId + "-ep" + _playingEpNum + ".txt"
 
         // Read existing progress file if it exists (for resume)
@@ -584,10 +633,13 @@ Item {
         }
     }
 
-    function _startMpvSession(showId, epNum, progressFile, startPos, url, referer, title) {
+    function _startMpvSession(showId, epNum, progressFile, startPos, url, referer, title, headers, mediaType) {
         _activeShowId = showId
         _activeEpNum = epNum
         _activeProgressFile = progressFile
+        _mpvLaunchStartedAt = Date.now()
+        _mpvStderrTail = ""
+        _mpvLastMeaningfulError = ""
         var args = [
             "mpv", "--fs", "--force-window=yes",
             "--title=" + (title || "Anime"),
@@ -596,8 +648,28 @@ Item {
         ]
         if (startPos > 5)
             args.push("--start=" + Math.floor(startPos))
-        if (referer && referer.length > 0)
-            args.push("--referrer=" + referer)
+        var effectiveHeaders = headers || ({})
+        var effectiveReferer = referer || effectiveHeaders["Referer"] || effectiveHeaders["Referrer"] || ""
+        if (effectiveReferer && effectiveReferer.length > 0) {
+            args.push("--referrer=" + effectiveReferer)
+            effectiveHeaders["Referer"] = effectiveReferer
+        }
+        if (effectiveHeaders["User-Agent"] && effectiveHeaders["User-Agent"].length > 0)
+            args.push("--user-agent=" + effectiveHeaders["User-Agent"])
+        var extraHeaders = []
+        Object.keys(effectiveHeaders).forEach(function(key) {
+            if (key === "User-Agent" || key === "Referrer")
+                return
+            var value = String(effectiveHeaders[key] || "")
+            if (value.length > 0)
+                extraHeaders.push(key + ": " + value)
+        })
+        if (extraHeaders.length > 0)
+            args.push("--http-header-fields=" + extraHeaders.join(","))
+        if (mediaType === "hls") {
+            args.push("--demuxer-lavf-o=protocol_whitelist=file,http,https,tcp,tls,crypto,data")
+            args.push("--load-unsafe-playlists=yes")
+        }
         args.push(url)
 
         mpvProcess.command = args
@@ -611,6 +683,8 @@ Item {
         var url = _pendingUrl
         var referer = _pendingRef
         var title = _pendingTitle
+        var mediaType = _pendingType
+        var headers = _pendingHeaders
 
         if (mpvProcess.running) {
             _queuedShowId = showId
@@ -619,20 +693,27 @@ Item {
             _queuedUrl = url
             _queuedRef = referer
             _queuedTitle = title
+            _queuedType = mediaType
+            _queuedHeaders = headers
             _queuedStartPos = startPos
             _launchQueued = true
             mpvProcess.running = false
             return
         }
 
-        _startMpvSession(showId, epNum, progressFile, startPos, url, referer, title)
+        _startMpvSession(showId, epNum, progressFile, startPos, url, referer, title, headers, mediaType)
     }
 
     Process {
         id: mpvProcess
 
         onRunningChanged: {
-            if (running || !root._activeProgressFile) return
+            if (running) {
+                root.isLaunchingPlayer = false
+                return
+            }
+            root.isLaunchingPlayer = false
+            if (!root._activeProgressFile) return
             // mpv exited — read the progress file
             postReadProc.command = [
                 "sh", "-c",
@@ -644,8 +725,31 @@ Item {
             postReadProc._showId = root._activeShowId
             postReadProc._epNum  = root._activeEpNum
             postReadProc._pfile  = root._activeProgressFile
+            postReadProc._stderrTail = root._mpvStderrTail
+            postReadProc._launchStartedAt = root._mpvLaunchStartedAt
             if (postReadProc.running) postReadProc.running = false
             Qt.callLater(function() { postReadProc.running = true })
+        }
+
+        stderr: SplitParser {
+            onRead: function(data) {
+                var line = (data || "").trim()
+                if (line.length === 0) return
+                root._mpvStderrTail = line
+                if (line.indexOf("Exiting...") === -1 && line.indexOf("errors while loading file") === -1)
+                    root._mpvLastMeaningfulError = line
+                Logger.w("Anime", "mpv:", line)
+            }
+        }
+        stdout: SplitParser {
+            onRead: function(data) {
+                var line = (data || "").trim()
+                if (line.length === 0) return
+                root._mpvStderrTail = line
+                if (line.indexOf("Exiting...") === -1 && line.indexOf("errors while loading file") === -1)
+                    root._mpvLastMeaningfulError = line
+                Logger.w("Anime", "mpv:", line)
+            }
         }
     }
 
@@ -655,6 +759,8 @@ Item {
         property string _showId: ""
         property string _epNum:  ""
         property string _pfile:  ""
+        property string _stderrTail: ""
+        property double _launchStartedAt: 0
 
         onRunningChanged: {
             if (running) return
@@ -666,6 +772,7 @@ Item {
                 if (line.startsWith("position=")) pos = parseFloat(line.substring(9)) || 0
             }
             _buf = ""
+            var ranBriefly = _launchStartedAt > 0 && (Date.now() - _launchStartedAt) < 2500
 
             if (dur > 0 && pos > 0) {
                 if (pos / dur >= 0.85) {
@@ -678,11 +785,18 @@ Item {
                     // Partially watched — save position
                     root.saveEpisodeProgress(_showId, _epNum, pos, dur)
                 }
+            } else if (ranBriefly) {
+                root.playbackError = root._formatPlaybackError(_stderrTail)
             }
 
             root._activeShowId = ""
             root._activeEpNum = ""
             root._activeProgressFile = ""
+            root._mpvLaunchStartedAt = 0
+            root._mpvStderrTail = ""
+            root._mpvLastMeaningfulError = ""
+            _stderrTail = ""
+            _launchStartedAt = 0
 
             if (root._launchQueued) {
                 var nextShowId = root._queuedShowId
@@ -692,6 +806,8 @@ Item {
                 var nextUrl = root._queuedUrl
                 var nextRef = root._queuedRef
                 var nextTitle = root._queuedTitle
+                var nextType = root._queuedType
+                var nextHeaders = root._queuedHeaders
 
                 root._launchQueued = false
                 root._queuedShowId = ""
@@ -701,6 +817,8 @@ Item {
                 root._queuedUrl = ""
                 root._queuedRef = ""
                 root._queuedTitle = ""
+                root._queuedType = ""
+                root._queuedHeaders = ({})
 
                 root._startMpvSession(
                     nextShowId,
@@ -709,7 +827,9 @@ Item {
                     nextStartPos,
                     nextUrl,
                     nextRef,
-                    nextTitle
+                    nextTitle,
+                    nextHeaders,
+                    nextType
                 )
             }
         }
@@ -722,6 +842,17 @@ Item {
     // ── Utility processes ────────────────────────────────────────────────────
     Process { id: mkdirProc }
     Process { id: rmProc }
+
+    Process {
+        id: feedWriteProc
+        property string _payload: ""
+        property bool _force: false
+
+        onRunningChanged: {
+            if (running) return
+            root._runFeedCommand(_force)
+        }
+    }
 
     // ── Browse processes ──────────────────────────────────────────────────────
     Process {
@@ -795,6 +926,7 @@ Item {
                     if (d.thumbnail)   enriched.thumbnail   = d.thumbnail
                     root.detailCache[_cacheKey] = root._deepClone(enriched)
                     root.currentAnime = enriched
+                    root._maybeAutoPlayPendingShow(enriched)
                 }
             } catch(e) {
                 root.detailError = "Parse error: " + e
@@ -809,6 +941,41 @@ Item {
         stderr: SplitParser {
             onRead: function(data) {
                 if (data.trim().length > 0) Logger.w("Anime", "detail:", data)
+            }
+        }
+    }
+
+    Process {
+        id: feedProc
+        property string _buf: ""
+
+        onRunningChanged: {
+            if (running) return
+            root.isFetchingFeed = false
+            if (_buf.length === 0) return
+            try {
+                var d = JSON.parse(_buf)
+                if (d.error) {
+                    root.feedError = d.error
+                    _buf = ""
+                    return
+                }
+                root.feedList = d.results || []
+                root.feedError = ""
+                root.feedLastFetchedAt = Date.now()
+            } catch(e) {
+                root.feedError = "Parse error: " + e
+                Logger.w("Anime", "feed error:", e)
+            }
+            _buf = ""
+        }
+
+        stdout: SplitParser {
+            onRead: function(data) { feedProc._buf += data }
+        }
+        stderr: SplitParser {
+            onRead: function(data) {
+                if (data.trim().length > 0) Logger.w("Anime", "feed:", data)
             }
         }
     }
@@ -873,6 +1040,53 @@ Item {
         genreProc.running = true
     }
 
+    function _runFeedCommand(forceRefresh) {
+        feedProc._buf = ""
+        feedProc.command = [
+            "python3", scriptPath, "feed",
+            feedLibraryPath, currentMode, feedCachePath
+        ]
+        isFetchingFeed = true
+        feedError = ""
+        if (forceRefresh === true)
+            feedLastFetchedAt = 0
+        if (feedProc.running) {
+            feedProc.running = false
+            Qt.callLater(function() { feedProc.running = true })
+        } else {
+            feedProc.running = true
+        }
+    }
+
+    function fetchFollowingFeed(forceRefresh) {
+        if (!libraryLoaded) return
+        if ((libraryList || []).length === 0) {
+            feedList = []
+            feedError = ""
+            feedLastFetchedAt = Date.now()
+            return
+        }
+        var now = Date.now()
+        if (!forceRefresh && feedList.length > 0 && (now - feedLastFetchedAt) < feedCooldownMs)
+            return
+
+        feedWriteProc._payload = JSON.stringify(libraryList || [])
+        feedWriteProc._force = forceRefresh === true
+        feedWriteProc.command = [
+            "sh", "-c",
+            "printf '%s' \"$1\" > \"$2\"",
+            "sh",
+            feedWriteProc._payload,
+            feedLibraryPath
+        ]
+        if (feedWriteProc.running) {
+            feedWriteProc.running = false
+            Qt.callLater(function() { feedWriteProc.running = true })
+        } else {
+            feedWriteProc.running = true
+        }
+    }
+
     function setGenre(genre) {
         if (currentGenre === genre) return
         currentGenre = genre
@@ -930,6 +1144,37 @@ Item {
     }
 
     function fetchAnimeDetail(show) {
+        pendingAutoPlayShowId = ""
+        detailFocusEpisodeNum = ""
+        _fetchAnimeDetail(show)
+    }
+
+    function openAnimeDetail(show, focusEpisodeNum) {
+        pendingAutoPlayShowId = ""
+        detailFocusEpisodeNum = focusEpisodeNum ? String(focusEpisodeNum) : ""
+        _fetchAnimeDetail(show)
+    }
+
+    function playNextForShow(show, focusEpisodeNum) {
+        if (!show || !show.id) return
+        pendingAutoPlayShowId = String(show.id)
+        detailFocusEpisodeNum = focusEpisodeNum ? String(focusEpisodeNum) : ""
+        _fetchAnimeDetail(show)
+    }
+
+    function _maybeAutoPlayPendingShow(show) {
+        if (!show || !show.id) return
+        if (String(show.id) !== String(pendingAutoPlayShowId || ""))
+            return
+        pendingAutoPlayShowId = ""
+        Qt.callLater(function() {
+            if (!currentAnime || String(currentAnime.id) !== String(show.id))
+                return
+            playNextUnwatched(currentAnime)
+        })
+    }
+
+    function _fetchAnimeDetail(show) {
         currentAnime = show
         detailError = ""
         var cacheKey = _detailCacheKey(show?.id, currentMode)
@@ -938,6 +1183,7 @@ Item {
             cachedDetail.episodes = _normaliseEpisodeList(cachedDetail.episodes || [])
             currentAnime = Object.assign({}, show, cachedDetail)
             isFetchingDetail = false
+            _maybeAutoPlayPendingShow(currentAnime)
             if (detailProc.running) detailProc.running = false
             return
         }
@@ -956,22 +1202,25 @@ Item {
 
     function clearDetail() {
         currentAnime = null
+        detailFocusEpisodeNum = ""
+        pendingAutoPlayShowId = ""
         if (detailProc.running) detailProc.running = false
     }
 
-    function fetchStreamLinks(showId, epId, epNum, _quality) {
+    function fetchStreamLinks(showId, epId, epNum) {
         if (!currentAnime) return
         _playingShowId  = showId
         _playingEpNum   = String(epNum)
         _pendingEpisodeId = String(epId || "")
         currentEpisode  = String(epNum)
         linksError      = ""
+        playbackError  = ""
         selectedLink    = null
         isFetchingLinks = true
         streamProc._buf  = ""
         streamProc.command = ["python3", scriptPath, "stream",
                               showId, String(epNum), currentMode,
-                              preferredProvider, preferredQuality]
+                              preferredProvider, "best"]
         if (streamProc.running) {
             streamProc.running = false
             Qt.callLater(function() { streamProc.running = true })

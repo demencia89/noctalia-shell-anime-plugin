@@ -25,7 +25,6 @@
     "runtimeRoot": "anime",
     "defaultSettings": {
       "mode": "sub",
-      "preferredQuality": "best",
       "preferredProvider": "auto"
     }
   }

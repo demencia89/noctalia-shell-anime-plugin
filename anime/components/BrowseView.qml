@@ -58,6 +58,22 @@ Item {
         if (resetFeed && anime) anime.fetchCurrentFeed(true)
     }
 
+    function horizontalWheelDelta(wheel) {
+        if (!wheel) return 0
+        var dy = wheel.pixelDelta.y !== 0 ? wheel.pixelDelta.y : wheel.angleDelta.y
+        var dx = wheel.pixelDelta.x !== 0 ? wheel.pixelDelta.x : wheel.angleDelta.x
+        return Math.abs(dx) > Math.abs(dy) ? dx : dy
+    }
+
+    function scrollHorizontally(flickable, wheel) {
+        if (!flickable || !wheel) return
+        var delta = horizontalWheelDelta(wheel)
+        if (delta === 0) return
+        var maxX = Math.max(0, flickable.contentWidth - flickable.width)
+        flickable.contentX = Math.max(0, Math.min(maxX, flickable.contentX - delta))
+        wheel.accepted = true
+    }
+
     TapHandler {
         enabled: searchBar.visible
         gesturePolicy: TapHandler.ReleaseWithinBounds
@@ -96,13 +112,20 @@ Item {
 
                 // Wordmark (hidden when search is open)
                 Rectangle {
+                    id: browseWordmark
                     visible: !searchBar.visible
                     Layout.fillWidth: true
                     implicitHeight: 38
                     radius: 19
-                    color: Qt.rgba(Color.mSurface.r, Color.mSurface.g, Color.mSurface.b, 0.88)
+                    color: browseTitleArea.containsMouse
+                        ? Qt.rgba(Color.mSurfaceVariant.r, Color.mSurfaceVariant.g, Color.mSurfaceVariant.b, 0.92)
+                        : Qt.rgba(Color.mSurface.r, Color.mSurface.g, Color.mSurface.b, 0.88)
                     border.width: 1
-                    border.color: Qt.rgba(Color.mOutlineVariant.r, Color.mOutlineVariant.g, Color.mOutlineVariant.b, 0.4)
+                    border.color: browseTitleArea.containsMouse
+                        ? Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.28)
+                        : Qt.rgba(Color.mOutlineVariant.r, Color.mOutlineVariant.g, Color.mOutlineVariant.b, 0.4)
+                    Behavior on color { ColorAnimation { duration: 180 } }
+                    Behavior on border.color { ColorAnimation { duration: 180 } }
 
                     Row {
                         anchors {
@@ -120,12 +143,16 @@ Item {
                         Text {
                             text: "nime"
                             font.pixelSize: 22; font.letterSpacing: 1
-                            color: Color.mOnSurface; opacity: 0.85
+                            color: Color.mOnSurface
+                            opacity: browseTitleArea.containsMouse ? 1 : 0.85
+                            Behavior on opacity { NumberAnimation { duration: 180 } }
                         }
                     }
 
                     MouseArea {
+                        id: browseTitleArea
                         anchors.fill: parent
+                        hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: browseView.openSearch()
                     }
@@ -175,15 +202,22 @@ Item {
                         Rectangle {
                             anchors.centerIn: parent
                             width: 18; height: 18; radius: 9
-                            color: Color.mSurfaceVariant
+                            color: clearSearchArea.containsMouse ? Color.mPrimaryContainer : Color.mSurfaceVariant
+                            Behavior on color { ColorAnimation { duration: 140 } }
                         }
                         Text {
                             anchors.centerIn: parent
                             text: "✕"
-                            color: Color.mOnSurfaceVariant
+                            color: clearSearchArea.containsMouse ? Color.mOnPrimaryContainer : Color.mOnSurfaceVariant
                             font.pixelSize: 9; font.bold: true
+                            Behavior on color { ColorAnimation { duration: 140 } }
                         }
-                        MouseArea { anchors.fill: parent; onClicked: searchField.text = "" }
+                        MouseArea {
+                            id: clearSearchArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: searchField.text = ""
+                        }
                     }
                 }
 
@@ -206,18 +240,29 @@ Item {
                     Rectangle {
                         anchors.centerIn: parent
                         width: 32; height: 32; radius: 16
-                        color: searchBar.visible ? Color.mPrimaryContainer : "transparent"
+                        color: (searchBar.visible || browseSearchToggleArea.containsMouse)
+                            ? Color.mPrimaryContainer
+                            : "transparent"
+                        border.width: browseSearchToggleArea.containsMouse ? 1 : 0
+                        border.color: Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.25)
+                        scale: browseSearchToggleArea.containsMouse ? 1.06 : 1.0
                         Behavior on color { ColorAnimation { duration: 180 } }
+                        Behavior on border.width { NumberAnimation { duration: 180 } }
+                        Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
                     }
                     Text {
                         anchors.centerIn: parent
                         text: "⌕"; font.pixelSize: 18
-                        color: searchBar.visible ? Color.mOnPrimaryContainer : Color.mOnSurfaceVariant
+                        color: (searchBar.visible || browseSearchToggleArea.containsMouse)
+                            ? Color.mOnPrimaryContainer
+                            : Color.mOnSurfaceVariant
                         Behavior on color { ColorAnimation { duration: 180 } }
                     }
                     MouseArea {
+                        id: browseSearchToggleArea
                         anchors.fill: parent
                         z: 1
+                        hoverEnabled: true
                         onClicked: {
                             searchBar.visible = !searchBar.visible
                             if (searchBar.visible) searchField.forceActiveFocus()
@@ -250,7 +295,7 @@ Item {
                                 Rectangle {
                                     anchors { fill: parent; margins: 3 }
                                     radius: 11
-                                    color: active ? Color.mPrimary : "transparent"
+                                    color: active ? Color.mPrimary : (modeArea.containsMouse ? Color.mPrimaryContainer : "transparent")
                                     Behavior on color { ColorAnimation { duration: 160 } }
                                 }
                                 Text {
@@ -258,11 +303,13 @@ Item {
                                     anchors.centerIn: parent
                                     text: modelData.toUpperCase()
                                     font.pixelSize: 10; font.letterSpacing: 1; font.bold: true
-                                    color: active ? Color.mOnPrimary : Color.mOnSurfaceVariant
+                                    color: active ? Color.mOnPrimary : (modeArea.containsMouse ? Color.mOnPrimaryContainer : Color.mOnSurfaceVariant)
                                     Behavior on color { ColorAnimation { duration: 160 } }
                                 }
                                 MouseArea {
+                                    id: modeArea
                                     anchors.fill: parent
+                                    hoverEnabled: true
                                     onClicked: if (anime) anime.setMode(modelData)
                                 }
                             }
@@ -272,30 +319,34 @@ Item {
 
                 Item {
                     width: 38; height: 38
+                    readonly property bool hovered: settingsHover.hovered
 
                     Rectangle {
                         anchors.centerIn: parent
                         width: 32; height: 32; radius: 16
-                        color: settingsArea.containsMouse
+                        color: parent.hovered
                             ? Color.mPrimaryContainer
                             : "transparent"
-                        border.width: settingsArea.containsMouse ? 1 : 0
+                        border.width: parent.hovered ? 1 : 0
                         border.color: Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.25)
+                        scale: parent.hovered ? 1.06 : 1.0
                         Behavior on color { ColorAnimation { duration: 180 } }
+                        Behavior on border.width { NumberAnimation { duration: 180 } }
+                        Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
                     }
                     Text {
                         anchors.centerIn: parent
                         text: "⚙"
                         font.pixelSize: 15
-                        color: settingsArea.containsMouse
+                        color: parent.hovered
                             ? Color.mOnPrimaryContainer
                             : Color.mOnSurfaceVariant
                         Behavior on color { ColorAnimation { duration: 180 } }
                     }
+                    HoverHandler { id: settingsHover }
                     MouseArea {
                         id: settingsArea
                         anchors.fill: parent
-                        hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: browseView.settingsRequested()
                     }
@@ -328,16 +379,24 @@ Item {
 
                         readonly property bool active: (anime?.currentView === modelData.value)
                             || (anime?.currentView === "search" && anime?.browseFeed === modelData.value)
+                        readonly property bool hovered: feedTabHover.hovered
 
                         Rectangle {
                             anchors.fill: parent
                             radius: 15
-                            color: active ? Color.mPrimary : Color.mSurface
+                            color: active
+                                ? Color.mPrimary
+                                : (hovered
+                                    ? Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.18)
+                                    : Qt.rgba(Color.mSurfaceVariant.r, Color.mSurfaceVariant.g, Color.mSurfaceVariant.b, 0.82))
                             border.width: 1
                             border.color: active
                                 ? Color.mPrimary
-                                : Qt.rgba(Color.mOutlineVariant.r, Color.mOutlineVariant.g, Color.mOutlineVariant.b, 0.5)
+                                : (hovered
+                                    ? Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.45)
+                                    : Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.28))
                             Behavior on color { ColorAnimation { duration: 160 } }
+                            Behavior on border.color { ColorAnimation { duration: 160 } }
                         }
 
                         Text {
@@ -347,12 +406,16 @@ Item {
                             font.pixelSize: 11
                             font.bold: active
                             font.letterSpacing: 0.4
-                            color: active ? Color.mOnPrimary : Color.mOnSurfaceVariant
+                            color: active ? Color.mOnPrimary : (hovered ? Color.mPrimary : Color.mOnSurfaceVariant)
                             Behavior on color { ColorAnimation { duration: 160 } }
                         }
 
+                        HoverHandler { id: feedTabHover }
+
                         MouseArea {
+                            id: feedTabArea
                             anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 if (!anime) return
                                 browseView.closeSearch(false)
@@ -395,14 +458,24 @@ Item {
 
                     readonly property bool active: (modelData === "All" && (anime?.currentGenre ?? "") === "") ||
                                                    (anime?.currentGenre === modelData)
+                    readonly property bool hovered: genreHover.hovered
 
                     Rectangle {
                         anchors.fill: parent
                         radius: 16
-                        color: active ? Color.mPrimary : Color.mSurfaceVariant
-                        border.color: active ? Color.mPrimary : Color.mOutlineVariant
+                        color: active
+                            ? Color.mPrimary
+                            : (hovered
+                                ? Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.18)
+                                : Qt.rgba(Color.mSurfaceVariant.r, Color.mSurfaceVariant.g, Color.mSurfaceVariant.b, 0.82))
+                        border.color: active
+                            ? Color.mPrimary
+                            : (hovered
+                                ? Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.45)
+                                : Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.28))
                         border.width: 1
                         Behavior on color { ColorAnimation { duration: 160 } }
+                        Behavior on border.color { ColorAnimation { duration: 160 } }
                     }
 
                     Text {
@@ -410,12 +483,16 @@ Item {
                         anchors.centerIn: parent
                         text: modelData
                         font.pixelSize: 11; font.bold: active
-                        color: active ? Color.mOnPrimary : Color.mOnSurfaceVariant
+                        color: active ? Color.mOnPrimary : (hovered ? Color.mPrimary : Color.mOnSurfaceVariant)
                         Behavior on color { ColorAnimation { duration: 160 } }
                     }
 
+                    HoverHandler { id: genreHover }
+
                     MouseArea {
+                        id: genreArea
                         anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             if (anime) {
                                 anime.setGenre(modelData === "All" ? "" : modelData)
@@ -431,23 +508,10 @@ Item {
                 MouseArea {
                     anchors.fill: parent
                     acceptedButtons: Qt.NoButton
-                    onWheel: (wheel) => {
-                        genreList.flick(wheel.angleDelta.y * 5, 0)
+                    onWheel: function(wheel) {
+                        browseView.scrollHorizontally(genreList, wheel)
                     }
                 }
-            }
-            
-            // Subtle gradient on right to indicate more items
-            Rectangle {
-                anchors { right: parent.right; top: parent.top; bottom: parent.bottom }
-                width: 32
-                gradient: Gradient {
-                    orientation: Gradient.Horizontal
-                    GradientStop { position: 0.0; color: "transparent" }
-                    GradientStop { position: 1.0; color: Color.mSurface }
-                }
-                opacity: genreList.atEnd ? 0 : 0.8
-                Behavior on opacity { NumberAnimation { duration: 200 } }
             }
         }
 
@@ -465,7 +529,7 @@ Item {
                     readonly property var continueEntries: anime?.getContinueWatchingList() ?? []
                     readonly property bool showRail: continueEntries.length > 0 && (anime?.currentView ?? "") !== "search"
                     Layout.fillWidth: true
-                    Layout.preferredHeight: showRail ? 168 : 0
+                    Layout.preferredHeight: showRail ? 188 : 0
                     visible: showRail
 
                     Column {
@@ -507,12 +571,13 @@ Item {
                         ListView {
                             id: continueRail
                             width: parent.width
-                            height: 128
+                            height: 148
                             orientation: ListView.Horizontal
                             spacing: 10
                             boundsBehavior: Flickable.StopAtBounds
                             clip: true
                             model: continueSection.continueEntries
+                            flickableDirection: Flickable.HorizontalFlick
 
                             delegate: Item {
                                 width: 232
@@ -616,10 +681,17 @@ Item {
                                                 width: 88
                                                 height: 28
                                                 radius: 14
-                                                color: continueArea.containsMouse ? Color.mPrimary : Color.mPrimaryContainer
+                                                z: 3
+                                                readonly property bool hovered: continueButtonArea.containsMouse
+                                                color: hovered
+                                                    ? Qt.rgba(Color.mSecondary.r, Color.mSecondary.g, Color.mSecondary.b, 0.28)
+                                                    : Qt.rgba(Color.mSecondary.r, Color.mSecondary.g, Color.mSecondary.b, 0.18)
                                                 border.width: 1
-                                                border.color: Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.3)
+                                                border.color: hovered
+                                                    ? Qt.rgba(Color.mSecondary.r, Color.mSecondary.g, Color.mSecondary.b, 0.58)
+                                                    : Qt.rgba(Color.mSecondary.r, Color.mSecondary.g, Color.mSecondary.b, 0.42)
                                                 Behavior on color { ColorAnimation { duration: 140 } }
+                                                Behavior on border.color { ColorAnimation { duration: 140 } }
 
                                                 Text {
                                                     anchors.centerIn: parent
@@ -627,20 +699,43 @@ Item {
                                                     font.pixelSize: 10
                                                     font.bold: true
                                                     font.letterSpacing: 0.5
-                                                    color: continueArea.containsMouse ? Color.mOnPrimary : Color.mOnPrimaryContainer
+                                                    color: Color.mSecondary
                                                     Behavior on color { ColorAnimation { duration: 140 } }
+                                                }
+
+                                                MouseArea {
+                                                    id: continueButtonArea
+                                                    anchors.fill: parent
+                                                    hoverEnabled: true
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: browseView.openEntry(entry)
+                                                }
+
+                                                StyledToolTip {
+                                                    target: continueButtonArea
+                                                    shown: hovered
+                                                    above: true
+                                                    text: "Open details"
                                                 }
                                             }
                                         }
                                     }
 
                                     MouseArea {
-                                        id: continueArea
                                         anchors.fill: parent
-                                        hoverEnabled: true
+                                        z: 1
+                                        hoverEnabled: false
                                         cursorShape: Qt.PointingHandCursor
                                         onClicked: browseView.openEntry(entry)
                                     }
+                                }
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                acceptedButtons: Qt.NoButton
+                                onWheel: function(wheel) {
+                                    browseView.scrollHorizontally(continueRail, wheel)
                                 }
                             }
                         }
@@ -921,8 +1016,7 @@ Item {
                                     Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
                                     Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutBack } }
                                     Behavior on color { ColorAnimation { duration: 140 } }
-                                    ToolTip.visible: libraryActionArea.containsMouse
-                                    ToolTip.text: inLibrary ? "Remove from library" : "Add to library"
+                                    Behavior on border.color { ColorAnimation { duration: 140 } }
 
                                     NIcon {
                                         id: bookmarkIcon
@@ -997,10 +1091,17 @@ Item {
                                     id: cardArea
                                     anchors.fill: parent; hoverEnabled: true
                                     onClicked: browseView.animeSelected(modelData)
+                                            }
+                                        }
+                                    }
+
+                                    StyledToolTip {
+                                        target: libraryActionArea
+                                        shown: libraryActionArea.containsMouse
+                                        above: false
+                                        text: inLibrary ? "Remove from library" : "Add to library"
+                                    }
                                 }
-                            }
-                        }
-                    }
                 }
             }
         }

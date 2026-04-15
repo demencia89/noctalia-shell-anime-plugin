@@ -17,7 +17,7 @@ This repository is structured for submission to the Noctalia unofficial plugins 
 - Open a detailed episode list with watched markers, progress indicators, and direct playback
 - Launch the next unwatched episode from the detail header
 - Keep a persistent library with per-show watched state and episode progress
-- Save playback preferences for stream quality and provider priority
+- Save playback provider priority
 - Restore panel and grid scroll positions when moving in and out of detail pages
 - Respect Noctalia theme roles so the plugin follows the color scheme selected in Noctalia Shell settings
 
@@ -64,7 +64,7 @@ The root manifest exists so a local checkout loads directly. Runtime assets and 
 - Use `Browse` for discovery, recent releases, genre filters, and continue-watching shortcuts
 - Use `Library` for tracked shows, watched state, and library-only search
 - Use the detail panel to mark episodes watched, mark through the current episode, or play the next unwatched entry
-- Use `Settings` to tune panel size, poster size, preferred stream quality, and provider order
+- Use `Settings` to tune panel size, poster size, and provider order
 
 ## Settings
 
@@ -73,7 +73,6 @@ The root manifest exists so a local checkout loads directly. Runtime assets and 
 | `mode` | `sub` | Default playback mode: `sub` or `dub` |
 | `panelSize` | `medium` | Drawer width preset: `small`, `medium`, `large` |
 | `posterSize` | `medium` | Grid density preset: `small`, `medium`, `large` |
-| `preferredQuality` | `best` | Preferred playback quality: `best`, `1080`, `720`, `480` |
 | `preferredProvider` | `auto` | Preferred provider order with automatic fallback |
 
 ## Repository Layout

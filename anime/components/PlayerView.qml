@@ -20,6 +20,49 @@ Item {
     readonly property var player: anime?.player || null
     readonly property var audio:  anime?.audio || null
 
+    component PlayerActionButton: Button {
+        id: playerButton
+
+        property bool prominent: false
+
+        hoverEnabled: true
+        flat: true
+        implicitHeight: 34
+        implicitWidth: Math.max(40, contentItem.implicitWidth + 18)
+
+        background: Rectangle {
+            radius: height / 2
+            color: playerButton.prominent
+                ? (playerButton.down
+                    ? Color.mPrimary
+                    : (playerButton.hovered ? Color.mPrimary : Color.mPrimaryContainer))
+                : (playerButton.down
+                    ? Qt.rgba(Color.mSurfaceVariant.r, Color.mSurfaceVariant.g, Color.mSurfaceVariant.b, 0.95)
+                    : (playerButton.hovered
+                        ? Qt.rgba(Color.mSurfaceVariant.r, Color.mSurfaceVariant.g, Color.mSurfaceVariant.b, 0.88)
+                        : "transparent"))
+            border.width: 1
+            border.color: playerButton.prominent
+                ? Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, playerButton.hovered ? 0.95 : 0.5)
+                : Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, playerButton.hovered ? 0.35 : 0.0)
+            Behavior on color { ColorAnimation { duration: 150 } }
+            Behavior on border.color { ColorAnimation { duration: 150 } }
+        }
+
+        contentItem: Text {
+            text: playerButton.text
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            font: playerButton.font
+            color: playerButton.prominent
+                ? (playerButton.hovered ? Color.mOnPrimary : Color.mOnPrimaryContainer)
+                : (playerButton.hovered ? Color.mOnSurface : Color.mOnSurfaceVariant)
+            opacity: playerButton.hovered || playerButton.prominent ? 1 : 0.9
+            Behavior on color { ColorAnimation { duration: 150 } }
+            Behavior on opacity { NumberAnimation { duration: 150 } }
+        }
+    }
+
     // ── Metadata binding fixes ───────────────────────────────────────────────
     readonly property string displayTitle: metadata?.title || "Unknown Anime"
     readonly property string displayEpisode: metadata?.episode || "?"
@@ -93,9 +136,8 @@ Item {
                 anchors { fill: parent; leftMargin: 20; rightMargin: 20 }
                 spacing: 16
                 
-                Button {
+                PlayerActionButton {
                     text: "←"
-                    flat: true
                     onClicked: {
                         cleanup()
                         playerView.backRequested()
@@ -114,12 +156,13 @@ Item {
                     }
                 }
 
-                Button {
+                PlayerActionButton {
                     text: "MPV"
+                    prominent: true
                     onClicked: {
                         if (anime) {
                             var t = playerView.displayTitle + " - Ep " + playerView.displayEpisode
-                            anime.playWithMpv(playerView.streamUrl, playerView.headers.Referer || "", t, true)
+                            anime.playWithMpv(playerView.streamUrl, playerView.headers.Referer || "", t, playerView.headers || ({}), "hls")
                             cleanup()
                             playerView.backRequested()
                         }
@@ -175,9 +218,8 @@ Item {
                     Layout.fillWidth: true
                     spacing: 24
                     
-                    Button {
+                    PlayerActionButton {
                         text: player && player.playbackState === 1 ? "⏸" : "▶"
-                        flat: true
                         font.pixelSize: 20
                         onClicked: {
                             if (!player) return
