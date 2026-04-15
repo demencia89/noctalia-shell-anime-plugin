@@ -27,7 +27,7 @@ Item {
             border.color: choiceButton.active
                 ? Color.mPrimary
                 : Qt.rgba(Color.mOutlineVariant.r, Color.mOutlineVariant.g, Color.mOutlineVariant.b, 0.55)
-            opacity: choiceButton.active ? 1 : 0.92
+            opacity: !choiceButton.enabled ? 0.45 : (choiceButton.active ? 1 : 0.92)
         }
 
         contentItem: Text {
@@ -38,6 +38,7 @@ Item {
             font.pixelSize: 12
             font.bold: choiceButton.active
             font.letterSpacing: 0.3
+            opacity: choiceButton.enabled ? 1 : 0.5
         }
     }
 
@@ -347,6 +348,7 @@ Item {
                                     delegate: SettingChoiceButton {
                                         text: modelData.label
                                         active: anime?.posterSize === modelData.value
+                                        enabled: !(anime?.panelSize === "small" && modelData.value === "small")
                                         onClicked: if (anime) anime.setSetting("posterSize", modelData.value)
                                     }
                                 }

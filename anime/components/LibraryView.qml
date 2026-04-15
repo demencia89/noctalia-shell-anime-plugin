@@ -10,6 +10,7 @@ Item {
 
     property var pluginApi: null
     readonly property var anime: pluginApi?.mainInstance || null
+    property string librarySearchQuery: ""
 
     signal animeSelected(var show)
     signal settingsRequested()
@@ -29,21 +30,43 @@ Item {
         })
     }
 
-    function resumeEpisodeFor(entry) {
-        if (!entry) return ""
-        if (entry.lastWatchedEpNum) return entry.lastWatchedEpNum
-        var prog = entry.episodeProgress || {}
-        var episodes = Object.keys(prog).filter(function(key) {
-            return anime?._progressPosition(prog[key]) > 0
+    function filteredLibraryEntries() {
+        var entries = anime?.libraryList ?? []
+        var query = (librarySearchQuery || "").trim().toLowerCase()
+        if (query.length === 0) return entries
+        return entries.filter(function(entry) {
+            var haystack = [
+                entry.englishName || "",
+                entry.name || "",
+                entry.nativeName || ""
+            ].join(" ").toLowerCase()
+            return haystack.indexOf(query) !== -1
         })
-        episodes.sort(function(a, b) { return Number(b) - Number(a) })
-        return episodes.length > 0 ? episodes[0] : ""
     }
 
-    function resumeProgressRatioFor(entry) {
-        var epNum = resumeEpisodeFor(entry)
-        if (!entry || !epNum || !anime) return 0
-        return anime.getEpisodeProgressRatio(entry.id, epNum)
+    function openSearch() {
+        librarySearchBar.visible = true
+        librarySearchField.forceActiveFocus()
+    }
+
+    function closeSearch() {
+        librarySearchBar.visible = false
+        librarySearchField.text = ""
+    }
+
+    TapHandler {
+        enabled: librarySearchBar.visible
+        gesturePolicy: TapHandler.ReleaseWithinBounds
+        onTapped: function(eventPoint) {
+            var pos = librarySearchBar.mapToItem(libraryView, 0, 0)
+            var x = eventPoint.position.x
+            var y = eventPoint.position.y
+            var insideSearchBar =
+                x >= pos.x && x <= pos.x + librarySearchBar.width &&
+                y >= pos.y && y <= pos.y + librarySearchBar.height
+            if (!insideSearchBar)
+                libraryView.closeSearch()
+        }
     }
 
     ColumnLayout {
@@ -67,6 +90,7 @@ Item {
                 spacing: 8
 
                 Rectangle {
+                    visible: !librarySearchBar.visible
                     Layout.fillWidth: true
                     implicitHeight: 38
                     radius: 19
@@ -96,6 +120,77 @@ Item {
                             opacity: 0.85
                         }
                     }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: libraryView.openSearch()
+                    }
+                }
+
+                Rectangle {
+                    id: librarySearchBar
+                    Layout.fillWidth: true
+                    height: 36
+                    radius: 18
+                    color: Color.mSurface
+                    visible: false
+                    border.color: librarySearchField.activeFocus ? Color.mPrimary : Color.mOutlineVariant
+                    border.width: librarySearchField.activeFocus ? 1.5 : 1
+
+                    TextInput {
+                        id: librarySearchField
+                        anchors {
+                            verticalCenter: parent.verticalCenter
+                            left: parent.left
+                            right: libraryClearBtn.left
+                            leftMargin: 14
+                            rightMargin: 6
+                        }
+                        color: Color.mOnSurface
+                        font.pixelSize: 13
+                        clip: true
+                        onTextChanged: libraryView.librarySearchQuery = text
+                        Keys.onEscapePressed: {
+                            libraryView.closeSearch()
+                        }
+                    }
+
+                    Text {
+                        anchors { verticalCenter: parent.verticalCenter; left: parent.left; leftMargin: 14 }
+                        text: "Search library…"
+                        color: Color.mOnSurfaceVariant
+                        font.pixelSize: 13
+                        visible: librarySearchField.text.length === 0
+                        opacity: 0.6
+                    }
+
+                    Item {
+                        id: libraryClearBtn
+                        anchors { right: parent.right; verticalCenter: parent.verticalCenter; rightMargin: 10 }
+                        width: 22
+                        height: 22
+                        visible: librarySearchField.text.length > 0
+
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: 18
+                            height: 18
+                            radius: 9
+                            color: Color.mSurfaceVariant
+                        }
+                        Text {
+                            anchors.centerIn: parent
+                            text: "✕"
+                            color: Color.mOnSurfaceVariant
+                            font.pixelSize: 9
+                            font.bold: true
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: librarySearchField.text = ""
+                        }
+                    }
                 }
 
                 Rectangle {
@@ -113,6 +208,32 @@ Item {
                         font.pixelSize: 10
                         font.letterSpacing: 0.5
                         color: Color.mOnSurfaceVariant
+                    }
+                }
+
+                Item {
+                    width: 38; height: 38
+
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: 32; height: 32; radius: 16
+                        color: librarySearchBar.visible ? Color.mPrimaryContainer : "transparent"
+                        Behavior on color { ColorAnimation { duration: 180 } }
+                    }
+                    Text {
+                        anchors.centerIn: parent
+                        text: "⌕"; font.pixelSize: 18
+                        color: librarySearchBar.visible ? Color.mOnPrimaryContainer : Color.mOnSurfaceVariant
+                        Behavior on color { ColorAnimation { duration: 180 } }
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        z: 1
+                        onClicked: {
+                            librarySearchBar.visible = !librarySearchBar.visible
+                            if (librarySearchBar.visible) librarySearchField.forceActiveFocus()
+                            else libraryView.closeSearch()
+                        }
                     }
                 }
 
@@ -233,198 +354,42 @@ Item {
                 anchors.fill: parent
                 spacing: 0
 
+                // ── Library grid ──────────────────────────────────────────
                 Item {
-                    id: continueSection
-                    readonly property var continueEntries: anime?.getContinueWatchingList() ?? []
                     Layout.fillWidth: true
-                    Layout.preferredHeight: continueEntries.length > 0 ? 168 : 0
-                    visible: continueEntries.length > 0
+                    Layout.fillHeight: true
+                    visible: libraryView.filteredLibraryEntries().length === 0
 
                     Column {
-                        anchors.fill: parent
-                        anchors.margins: 10
+                        anchors.centerIn: parent
                         spacing: 10
 
-                        Row {
-                            width: parent.width
-                            spacing: 8
-
-                            Text {
-                                text: "Continue Watching"
-                                font.pixelSize: 14
-                                font.bold: true
-                                color: Color.mOnSurface
-                            }
-
-                            Rectangle {
-                                height: 20
-                                width: continueCount.implicitWidth + 14
-                                radius: 10
-                                color: Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.12)
-                                border.width: 1
-                                border.color: Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.28)
-
-                                Text {
-                                    id: continueCount
-                                    anchors.centerIn: parent
-                                    text: continueSection.continueEntries.length + " active"
-                                    font.pixelSize: 9
-                                    font.bold: true
-                                    font.letterSpacing: 0.5
-                                    color: Color.mPrimary
-                                }
-                            }
+                        Text {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: "No matches"
+                            font.pixelSize: 15
+                            font.bold: true
+                            color: Color.mOnSurface
                         }
 
-                        ListView {
-                            id: continueRail
-                            width: parent.width
-                            height: 128
-                            orientation: ListView.Horizontal
-                            spacing: 10
-                            boundsBehavior: Flickable.StopAtBounds
-                            clip: true
-                            model: continueSection.continueEntries
-
-                            delegate: Item {
-                                width: 232
-                                height: continueRail.height
-
-                                readonly property var entry: modelData
-                                readonly property string resumeEpisode: libraryView.resumeEpisodeFor(entry)
-                                readonly property real progressRatio: libraryView.resumeProgressRatioFor(entry)
-
-                                Rectangle {
-                                    anchors.fill: parent
-                                    radius: 18
-                                    color: Qt.rgba(Color.mSurface.r, Color.mSurface.g, Color.mSurface.b, 0.9)
-                                    border.width: 1
-                                    border.color: Qt.rgba(Color.mOutlineVariant.r, Color.mOutlineVariant.g, Color.mOutlineVariant.b, 0.38)
-
-                                    Row {
-                                        anchors.fill: parent
-                                        anchors.margins: 10
-                                        spacing: 10
-
-                                        Rectangle {
-                                            width: 72
-                                            height: parent.height
-                                            radius: 12
-                                            clip: true
-                                            color: Color.mSurfaceVariant
-
-                                            Image {
-                                                anchors.fill: parent
-                                                source: entry.thumbnail || ""
-                                                fillMode: Image.PreserveAspectCrop
-                                                asynchronous: true
-                                                cache: true
-                                            }
-                                        }
-
-                                        Column {
-                                            width: parent.width - 82
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            spacing: 6
-
-                                            Rectangle {
-                                                height: 20
-                                                width: resumeText.implicitWidth + 14
-                                                radius: 10
-                                                color: Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.12)
-
-                                                Text {
-                                                    id: resumeText
-                                                    anchors.centerIn: parent
-                                                    text: resumeEpisode ? "Resume Ep. " + resumeEpisode : "In progress"
-                                                    font.pixelSize: 9
-                                                    font.bold: true
-                                                    font.letterSpacing: 0.4
-                                                    color: Color.mPrimary
-                                                }
-                                            }
-
-                                            Text {
-                                                width: parent.width
-                                                text: entry.englishName || entry.name || ""
-                                                font.pixelSize: 13
-                                                font.bold: true
-                                                color: Color.mOnSurface
-                                                wrapMode: Text.Wrap
-                                                maximumLineCount: 2
-                                                elide: Text.ElideRight
-                                                lineHeight: 1.25
-                                            }
-
-                                            Text {
-                                                width: parent.width
-                                                text: (entry.watchedEpisodes || []).length > 0
-                                                    ? (entry.watchedEpisodes || []).length + " watched"
-                                                    : "Pick up where you left off"
-                                                font.pixelSize: 10
-                                                color: Color.mOnSurfaceVariant
-                                                opacity: 0.78
-                                                elide: Text.ElideRight
-                                            }
-
-                                            Rectangle {
-                                                width: parent.width
-                                                height: 6
-                                                radius: 3
-                                                color: Qt.rgba(Color.mOutlineVariant.r, Color.mOutlineVariant.g, Color.mOutlineVariant.b, 0.26)
-                                                visible: progressRatio > 0
-
-                                                Rectangle {
-                                                    width: parent.width * progressRatio
-                                                    height: parent.height
-                                                    radius: parent.radius
-                                                    color: Color.mTertiary
-                                                }
-                                            }
-
-                                            Item { width: 1; height: 2 }
-
-                                            Rectangle {
-                                                width: 88
-                                                height: 28
-                                                radius: 14
-                                                color: continueArea.containsMouse ? Color.mPrimary : Color.mPrimaryContainer
-                                                border.width: 1
-                                                border.color: Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.3)
-                                                Behavior on color { ColorAnimation { duration: 140 } }
-
-                                                Text {
-                                                    anchors.centerIn: parent
-                                                    text: "Open"
-                                                    font.pixelSize: 10
-                                                    font.bold: true
-                                                    font.letterSpacing: 0.5
-                                                    color: continueArea.containsMouse ? Color.mOnPrimary : Color.mOnPrimaryContainer
-                                                    Behavior on color { ColorAnimation { duration: 140 } }
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    MouseArea {
-                                        id: continueArea
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: libraryView.openEntry(entry)
-                                    }
-                                }
-                            }
+                        Text {
+                            width: 280
+                            horizontalAlignment: Text.AlignHCenter
+                            wrapMode: Text.Wrap
+                            text: "Try a different title, English name, or native name."
+                            font.pixelSize: 11
+                            color: Color.mOnSurfaceVariant
+                            opacity: 0.74
                         }
                     }
                 }
 
-                // ── Library grid ──────────────────────────────────────────
                 GridView {
                     id: libGrid
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    topMargin: continueSection.visible ? 0 : 10
+                    visible: libraryView.filteredLibraryEntries().length > 0
+                    topMargin: 10
                     leftMargin: 8
                     rightMargin: 8
                     bottomMargin: 10
@@ -437,7 +402,7 @@ Item {
                     clip: true; boundsBehavior: Flickable.StopAtBounds
                     model: {
                         var _ = anime?.libraryVersion ?? 0  // reactive trigger
-                        return anime?.libraryList ?? []
+                        return libraryView.filteredLibraryEntries()
                     }
 
                     ScrollBar.vertical: ScrollBar {

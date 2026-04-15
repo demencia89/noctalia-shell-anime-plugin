@@ -8,11 +8,42 @@ Item {
 
     property var pluginApi: null
     readonly property var anime: pluginApi?.mainInstance || null
+    property string _lastCenteredEpisodeKey: ""
 
     signal backRequested()
 
     readonly property bool _inLibrary:
         anime && anime.currentAnime ? anime.isInLibrary(anime.currentAnime.id) : false
+    readonly property var _nextEpisode:
+        anime?.currentAnime ? anime.getNextUnwatchedEpisode(anime.currentAnime) : null
+
+    function centerLastWatchedEpisode(force) {
+        if (!anime?.currentAnime || !epList.visible) return
+
+        var entry = anime.getLibraryEntry(anime.currentAnime.id)
+        var lastEpNum = entry?.lastWatchedEpNum || ""
+        var episodes = anime.currentAnime.episodes || []
+        if (!lastEpNum || episodes.length === 0) return
+
+        var key = String(anime.currentAnime.id || "") + ":" + String(lastEpNum) + ":" + String(episodes.length)
+        if (!force && _lastCenteredEpisodeKey === key)
+            return
+
+        var index = -1
+        for (var i = 0; i < episodes.length; i++) {
+            if (String(episodes[i].number) === String(lastEpNum)) {
+                index = i
+                break
+            }
+        }
+        if (index < 0) return
+
+        _lastCenteredEpisodeKey = key
+        Qt.callLater(function() {
+            if (!epList.visible || epList.count <= index) return
+            epList.positionViewAtIndex(index, ListView.Center)
+        })
+    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -88,6 +119,48 @@ Item {
 
                 // Library button
                 Item {
+                    visible: anime?.currentAnime != null && detailView._nextEpisode != null
+                    width: nextBtnLabel.implicitWidth + 34; height: 32
+
+                    Rectangle {
+                        anchors.fill: parent; radius: height / 2
+                        color: nextArea.containsMouse ? Color.mPrimary : Color.mPrimaryContainer
+                        border.color: Color.mPrimary
+                        border.width: 1
+                        Behavior on color { ColorAnimation { duration: 180 } }
+                    }
+                    Row {
+                        anchors.centerIn: parent; spacing: 6
+
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "▶"
+                            font.pixelSize: 10; font.bold: true
+                            color: nextArea.containsMouse ? Color.mOnPrimary : Color.mOnPrimaryContainer
+                        }
+                        Text {
+                            id: nextBtnLabel
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: detailView._nextEpisode
+                                ? "Next Ep. " + detailView._nextEpisode.number
+                                : "Next"
+                            font.pixelSize: 11; font.letterSpacing: 0.3
+                            color: nextArea.containsMouse ? Color.mOnPrimary : Color.mOnPrimaryContainer
+                        }
+                    }
+                    MouseArea {
+                        id: nextArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (!anime?.currentAnime) return
+                            anime.playNextUnwatched(anime.currentAnime)
+                        }
+                    }
+                }
+
+                Item {
                     visible: anime?.currentAnime != null
                     width: libBtnLabel.implicitWidth + 28; height: 32
 
@@ -131,42 +204,112 @@ Item {
 
         // ── Episode count / last watched sub-bar ──────────────────────────────
         Rectangle {
-            Layout.fillWidth: true; height: 34
+            Layout.fillWidth: true
+            height: Math.max(34, detailMetaFlow.implicitHeight + 16)
             color: "transparent"
             visible: anime?.currentAnime != null
 
-            RowLayout {
-                anchors { fill: parent; leftMargin: 16; rightMargin: 16 }
+            Item {
+                anchors.fill: parent
+                anchors.margins: 8
+                anchors.leftMargin: 16
+                anchors.rightMargin: 16
 
-                Text {
-                    text: {
-                        var eps = anime?.currentAnime?.episodes
-                        return eps ? (eps.length + " episodes") : ""
+                readonly property var libraryEntry: anime?.currentAnime
+                    ? anime.getLibraryEntry(anime.currentAnime.id) : null
+                readonly property var episodeList: anime?.currentAnime?.episodes || []
+                readonly property int lastWatchedIndex: {
+                    if (!libraryEntry || !episodeList.length) return -1
+                    for (var i = 0; i < episodeList.length; i++) {
+                        if (String(episodeList[i].number) === String(libraryEntry.lastWatchedEpNum))
+                            return i
                     }
-                    font.pixelSize: 11; font.letterSpacing: 1
-                    color: Color.mOnSurfaceVariant; opacity: 0.75
+                    return -1
+                }
+                readonly property bool hasOlderUnwatched: {
+                    if (!libraryEntry || lastWatchedIndex < 0) return false
+                    for (var i = 0; i <= lastWatchedIndex; i++) {
+                        if (!(anime?.isEpisodeWatched(anime?.currentAnime?.id ?? "", episodeList[i].number) ?? false))
+                            return true
+                    }
+                    return false
                 }
 
-                Item { Layout.fillWidth: true }
-
-                // Last-watched badge
-                Rectangle {
-                    readonly property var _entry: anime?.currentAnime
-                        ? anime.getLibraryEntry(anime.currentAnime.id) : null
-                    visible: _entry !== null && _entry !== undefined
-                        && (_entry.lastWatchedEpNum || "") !== ""
-                    height: 20; width: lastWatchedText.implicitWidth + 18; radius: 10
-                    color: Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.12)
-                    border.color: Color.mPrimary; border.width: 1
+                Flow {
+                    id: detailMetaFlow
+                    anchors {
+                        left: parent.left
+                        right: parent.right
+                        top: parent.top
+                        topMargin: 2
+                    }
+                    spacing: 8
 
                     Text {
-                        id: lastWatchedText; anchors.centerIn: parent
                         text: {
-                            var e = anime?.currentAnime
-                                ? anime.getLibraryEntry(anime.currentAnime.id) : null
-                            return e ? "Last: Ep. " + e.lastWatchedEpNum : ""
+                            var eps = anime?.currentAnime?.episodes
+                            return eps ? (eps.length + " episodes") : ""
                         }
-                        font.pixelSize: 9; font.letterSpacing: 0.8; color: Color.mPrimary
+                        font.pixelSize: 11
+                        font.letterSpacing: 1
+                        color: Color.mOnSurfaceVariant
+                        opacity: 0.75
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    Rectangle {
+                        visible: parent.parent.libraryEntry !== null && parent.parent.libraryEntry !== undefined
+                            && (parent.parent.libraryEntry.lastWatchedEpNum || "") !== ""
+                        height: 20
+                        width: lastWatchedText.implicitWidth + 18
+                        radius: 10
+                        color: Qt.rgba(Color.mPrimary.r, Color.mPrimary.g, Color.mPrimary.b, 0.12)
+                        border.color: Color.mPrimary
+                        border.width: 1
+
+                        Text {
+                            id: lastWatchedText
+                            anchors.centerIn: parent
+                            text: parent.visible ? "Last: Ep. " + detailMetaFlow.parent.libraryEntry.lastWatchedEpNum : ""
+                            font.pixelSize: 9
+                            font.letterSpacing: 0.8
+                            color: Color.mPrimary
+                        }
+                    }
+
+                    Rectangle {
+                        visible: detailMetaFlow.parent.hasOlderUnwatched
+                        height: 22
+                        width: catchUpText.implicitWidth + 22
+                        radius: 11
+                        color: catchUpArea.containsMouse ? Color.mPrimaryContainer : Color.mSurface
+                        border.color: catchUpArea.containsMouse ? Color.mPrimary : Color.mOutlineVariant
+                        border.width: 1
+
+                        Text {
+                            id: catchUpText
+                            anchors.centerIn: parent
+                            text: "Mark 1→Last"
+                            font.pixelSize: 9
+                            font.letterSpacing: 0.6
+                            color: catchUpArea.containsMouse ? Color.mOnPrimaryContainer : Color.mOnSurfaceVariant
+                        }
+
+                        MouseArea {
+                            id: catchUpArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (!anime?.currentAnime || !detailMetaFlow.parent.libraryEntry) return
+                                anime.markEpisodesThrough(
+                                    anime.currentAnime,
+                                    detailMetaFlow.parent.libraryEntry.lastWatchedEpId || "",
+                                    detailMetaFlow.parent.libraryEntry.lastWatchedEpNum || "",
+                                    detailMetaFlow.parent.lastWatchedIndex
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -316,6 +459,29 @@ Item {
             // Error toast
             Rectangle {
                 anchors {
+                    bottom: parent.bottom
+                    horizontalCenter: parent.horizontalCenter
+                    bottomMargin: (anime?.linksError?.length ?? 0) > 0 ? 56 : 12
+                }
+                height: 36
+                radius: 18
+                width: detailErrText.implicitWidth + 28
+                color: Color.mErrorContainer
+                visible: (anime?.detailError?.length ?? 0) > 0 && !(anime?.isFetchingDetail ?? false)
+                z: 7
+
+                Text {
+                    id: detailErrText
+                    anchors.centerIn: parent
+                    text: anime?.detailError ?? ""
+                    font.pixelSize: 11
+                    color: Color.mOnErrorContainer
+                    elide: Text.ElideRight
+                }
+            }
+
+            Rectangle {
+                anchors {
                     bottom: parent.bottom; horizontalCenter: parent.horizontalCenter
                     bottomMargin: 12
                 }
@@ -337,6 +503,10 @@ Item {
                 anchors.fill: parent; clip: true
                 boundsBehavior: Flickable.StopAtBounds
                 model: anime?.currentAnime?.episodes ?? []
+
+                onModelChanged: detailView.centerLastWatchedEpisode(false)
+                onVisibleChanged: if (visible) detailView.centerLastWatchedEpisode(true)
+                onContentHeightChanged: detailView.centerLastWatchedEpisode(false)
 
                 ScrollBar.vertical: ScrollBar {
                     policy: ScrollBar.AsNeeded
@@ -455,9 +625,11 @@ Item {
                         }
 
                         Item {
+                            id: watchToggleButton
                             width: 28
                             height: 28
                             Layout.alignment: Qt.AlignVCenter
+                            z: 2
 
                             Rectangle {
                                 anchors.fill: parent
@@ -502,7 +674,12 @@ Item {
                     }
 
                     MouseArea {
-                        id: epRowArea; anchors.fill: parent; hoverEnabled: true
+                        id: epRowArea
+                        anchors {
+                            fill: parent
+                            rightMargin: 52
+                        }
+                        hoverEnabled: true
                         onClicked: {
                             if (!anime?.currentAnime) return
                             anime.fetchStreamLinks(
@@ -522,6 +699,11 @@ Item {
     Connections {
         target: anime
         enabled: anime !== null
+
+        function onCurrentAnimeChanged() {
+            detailView._lastCenteredEpisodeKey = ""
+            detailView.centerLastWatchedEpisode(true)
+        }
 
         function onSelectedLinkChanged() {
             if (!anime?.selectedLink) return

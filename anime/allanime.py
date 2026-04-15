@@ -6,6 +6,7 @@ No third-party dependencies; uses only stdlib.
 Usage:
   python3 allanime.py search <query> [sub|dub] [page]
   python3 allanime.py popular [page] [sub|dub]
+  python3 allanime.py recent [page] [sub|dub] [country]
   python3 allanime.py latest [page] [sub|dub] [country]
   python3 allanime.py episodes <show_id> [sub|dub]
   python3 allanime.py stream <show_id> <episode_number> [sub|dub]
@@ -118,15 +119,45 @@ def _shows(search_obj, page, mode, country="ALL"):
     results = [_normalise(e) for e in edges]
     print(json.dumps({"results": results, "hasNextPage": len(results) == 40}))
 
+def _shows_with_fallbacks(search_variants, page, mode, country="ALL"):
+    last_error = None
+    for search_obj in search_variants:
+        try:
+            _shows(search_obj, page, mode, country)
+            return
+        except urllib.error.HTTPError as e:
+            if e.code not in (400, 500):
+                raise
+            last_error = e
+            continue
+
+    if last_error:
+        raise last_error
+    raise RuntimeError("No working feed query variant found")
+
 # ── Commands ──────────────────────────────────────────────────────────────────
 def cmd_popular(page=1, mode="sub", genre=None):
     search = {"allowAdult": False, "allowUnknown": False}
     if genre:
         search["genres"] = [genre]
-    _shows(search, page, mode)
+    _shows_with_fallbacks([
+        dict(search, sortBy="Top"),
+        dict(search, sortBy="Popular"),
+        dict(search, sortBy="Trending"),
+        search,
+    ], page, mode)
+
+def cmd_recent(page=1, mode="sub", country="ALL"):
+    search = {"allowAdult": False, "allowUnknown": False}
+    _shows_with_fallbacks([
+        dict(search, sortBy="Recent"),
+        dict(search, sortBy="Latest_Update"),
+        dict(search, sortBy="Trending"),
+        search,
+    ], page, mode, country)
 
 def cmd_latest(page=1, mode="sub", country="ALL"):
-    _shows({"allowAdult": False, "allowUnknown": False, "sortBy": "latest"}, page, mode, country)
+    cmd_recent(page, mode, country)
 
 def cmd_search(query, mode="sub", page=1, genre=None):
     search = {"allowAdult": False, "allowUnknown": False, "query": query}
@@ -279,6 +310,12 @@ def main():
             )
         elif cmd == "latest":
             cmd_latest(
+                int(args[1]) if len(args) > 1 else 1,
+                args[2] if len(args) > 2 else "sub",
+                args[3] if len(args) > 3 else "ALL",
+            )
+        elif cmd == "recent":
+            cmd_recent(
                 int(args[1]) if len(args) > 1 else 1,
                 args[2] if len(args) > 2 else "sub",
                 args[3] if len(args) > 3 else "ALL",

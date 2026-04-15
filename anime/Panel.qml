@@ -19,7 +19,7 @@ Item {
     
     property real contentPreferredWidth: 
         screenWidth * (panelWidthMap[anime?.panelSize || "medium"])
-    property real contentPreferredHeight: 820 * Style.uiScaleRatio
+    property real contentPreferredHeight: 980 * Style.uiScaleRatio
 
     anchors.fill: parent
 

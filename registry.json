@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "plugins": [
+    {
+      "id": "anime",
+      "name": "Anime",
+      "version": "1.0.0",
+      "official": false,
+      "author": "demencia89",
+      "description": "Browse, track, and resume anime from Noctalia with AllAnime and mpv.",
+      "repository": "https://github.com/demencia89/noctalia-shell-anime-plugin.git",
+      "minNoctaliaVersion": "3.6.0",
+      "license": "MIT",
+      "tags": [
+        "Bar",
+        "Panel",
+        "Entertainment"
+      ],
+      "lastUpdated": null
+    }
+  ]
+}

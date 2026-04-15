@@ -1,60 +1,112 @@
 # Anime Plugin for Noctalia
 
-Browse and track anime directly from your Noctalia bar. Streams episodes via `mpv` using AllAnime as the backend source.
+Anime is a Noctalia bar and panel plugin for browsing, tracking, and resuming anime with `mpv`, backed by AllAnime metadata and stream resolution.
 
-## Features
+This repository is structured for submission to the Noctalia unofficial plugins ecosystem:
 
-- **Browse tab** — Popular and recent-release feeds, search, sub/dub toggle, infinite scroll, genre filters, and quick hover actions to add or remove shows from your library
-- **Library tab** — Saved shows with direct remove controls, progress bars, and remembered scroll position when returning from detail view
-- **Continue Watching rail** — In-progress anime are surfaced at the top of the library for quick resuming
-- **Detail view** — Full episode list with one-click mpv playback, per-episode watched/unwatched controls, and progress indicators
-- **Progress tracking** — Resume partial episodes, automatically mark watched episodes, and keep richer playback progress with position and duration
-- **Playback preferences** — Choose preferred stream quality and provider fallback order from the settings panel
-- **Navigation quality-of-life** — Browse and library grids restore your scroll position after opening and closing a show
-- **Adaptive styling** — Uses Noctalia theme roles so the plugin follows the active dynamic colorscheme
-- **Persistent state** — Library, layout preferences, browse preferences, playback preferences, and progress saved in Noctalia plugin settings
+- repository metadata lives at the root
+- the actual plugin runtime lives in [anime/](/home/ag/.config/noctalia/plugins/anime/anime)
+- registry automation lives in [.github/workflows/](/home/ag/.config/noctalia/plugins/anime/.github/workflows)
+- a root [manifest.json](/home/ag/.config/noctalia/plugins/anime/manifest.json) is kept only as a compatibility shim for local installs
+
+## Highlights
+
+- Browse popular and recent releases with infinite scroll, genre filtering, and sub/dub switching
+- Search from the Browse and Library tabs with quick keyboard-friendly entry points
+- Resume partially watched episodes from a Continue Watching rail on Browse
+- Open a detailed episode list with watched markers, progress indicators, and direct playback
+- Launch the next unwatched episode from the detail header
+- Keep a persistent library with per-show watched state and episode progress
+- Save playback preferences for stream quality and provider priority
+- Restore panel and grid scroll positions when moving in and out of detail pages
+- Respect Noctalia theme roles so the plugin follows the color scheme selected in Noctalia Shell settings
 
 ## Requirements
 
-- `mpv` in `$PATH`
 - `python3` in `$PATH`
-- Network access to `api.allanime.day` and the resolved stream providers
+- `mpv` in `$PATH`
+- Network access to `api.allanime.day` and the resolved stream hosts
 
 ## Installation
 
-Drop the `anime/` folder into your Noctalia plugins directory, then enable it in the Plugins tab.
+### Custom repository source
 
+Add this repository as a custom plugin source in Noctalia:
+
+```text
+https://github.com/demencia89/noctalia-shell-anime-plugin.git
 ```
-~/.config/noctalia/plugins/anime/
-├── manifest.json
-├── Main.qml
-├── BarWidget.qml
-├── Panel.qml
-├── progress.lua
-└── components/
-    ├── BrowseView.qml
-    ├── DetailView.qml
-    ├── LibraryView.qml
-    ├── PlayerView.qml
-    └── SettingsView.qml
+
+### Local checkout
+
+Clone this repository into your local Noctalia plugins directory as `anime/`, then enable it from Noctalia's Plugins view.
+
+```text
+~/.config/noctalia/plugins/
+└── anime/
+    ├── manifest.json
+    ├── README.md
+    ├── anime/
+    │   ├── manifest.json
+    │   ├── Main.qml
+    │   ├── Panel.qml
+    │   ├── BarWidget.qml
+    │   ├── allanime.py
+    │   ├── progress.lua
+    │   └── components/
+    └── registry.json
 ```
+
+The root manifest exists so a local checkout loads directly. Runtime assets and QML entry points still live under [anime/](/home/ag/.config/noctalia/plugins/anime/anime).
+
+## Usage
+
+- Use `Browse` for discovery, recent releases, genre filters, and continue-watching shortcuts
+- Use `Library` for tracked shows, watched state, and library-only search
+- Use the detail panel to mark episodes watched, mark through the current episode, or play the next unwatched entry
+- Use `Settings` to tune panel size, poster size, preferred stream quality, and provider order
 
 ## Settings
 
-| Key                 | Default   | Description                                                |
-|---------------------|-----------|------------------------------------------------------------|
-| `mode`              | `sub`     | Default audio mode (`sub` or `dub`)                        |
-| `panelSize`         | `medium`  | Drawer width preset (`small/medium/large`)                 |
-| `posterSize`        | `medium`  | Grid density preset (`small/medium/large`)                 |
-| `preferredQuality`  | `best`    | Preferred playback quality (`best/1080/720/480`)           |
-| `preferredProvider` | `auto`    | Preferred provider order (`auto/default/sharepoint/...`)   |
+| Key | Default | Description |
+| --- | --- | --- |
+| `mode` | `sub` | Default playback mode: `sub` or `dub` |
+| `panelSize` | `medium` | Drawer width preset: `small`, `medium`, `large` |
+| `posterSize` | `medium` | Grid density preset: `small`, `medium`, `large` |
+| `preferredQuality` | `best` | Preferred playback quality: `best`, `1080`, `720`, `480` |
+| `preferredProvider` | `auto` | Preferred provider order with automatic fallback |
 
-## Notes
+## Repository Layout
 
-- The plugin shells out to `python3` for API requests and to `mpv` for playback.
-- Stream URLs are resolved on demand; they are ephemeral and not stored in settings.
-- Library data is stored in `~/.config/noctalia/plugins/anime/settings.json`.
-- Resume data is stored as per-episode text files under `~/.config/noctalia/plugins/anime/progress/`.
-- Browse and library cards use separate library action buttons, so adding or removing a show does not require opening its detail view.
-- Existing saved progress entries remain compatible; newer sessions store both playback position and duration so the UI can render actual progress bars.
-- Provider preference is best-effort. If the preferred source fails, the plugin falls back to the remaining known providers automatically.
+```text
+.
+├── .github/workflows/      # registry automation
+├── anime/                  # actual plugin runtime for catalog installs
+├── LICENSE
+├── manifest.json           # local-install compatibility manifest
+├── README.md
+└── registry.json
+```
+
+## Maintainer Notes
+
+- [anime/manifest.json](/home/ag/.config/noctalia/plugins/anime/anime/manifest.json) is the manifest that should be indexed by unofficial plugin tooling
+- [manifest.json](/home/ag/.config/noctalia/plugins/anime/manifest.json) exists only to keep a local checkout loadable inside `~/.config/noctalia/plugins/anime`
+- `registry.json` is generated by [.github/workflows/update-registry.js](/home/ag/.config/noctalia/plugins/anime/.github/workflows/update-registry.js)
+- Local watch progress is stored in `progress/` and local plugin settings are stored in `settings.json`; both are ignored by git
+- Stream URLs are resolved on demand and are never persisted to settings
+
+## Pre-Submission Check
+
+Before opening the unofficial-plugin PR, verify these flows in a clean shell restart:
+
+1. The plugin appears in Noctalia and can be enabled from the Plugins view.
+2. Browse loads popular and recent feeds without duplicate content between the main Browse landing and the Recent feed.
+3. Search results open the correct detail page from both Browse and Library.
+4. Episode actions work correctly: play, mark watched, mark through current episode, and play next unwatched.
+5. Continue Watching appears on Browse and resumes the correct episode position.
+6. Panel size, poster size, library contents, and watched progress survive a shell restart.
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](/home/ag/.config/noctalia/plugins/anime/LICENSE).

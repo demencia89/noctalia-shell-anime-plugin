@@ -6,13 +6,29 @@ Item {
     id: root
 
     property var pluginApi: null
+    readonly property string runtimeRoot:
+        pluginApi?.manifest?.metadata?.runtimeRoot ?? ""
+
+    function _pathJoin(base, child) {
+        if (!base || base.length === 0)
+            return child || ""
+        if (!child || child.length === 0)
+            return base
+        if (base.endsWith("/"))
+            return base + child
+        return base + "/" + child
+    }
+
+    function _runtimePath(relativePath) {
+        return _pathJoin(_pathJoin(pluginApi?.pluginDir ?? "", runtimeRoot), relativePath)
+    }
 
     readonly property string scriptPath:
-        (pluginApi?.pluginDir ?? "") + "/allanime.py"
+        _runtimePath("allanime.py")
     readonly property string luaPath:
-        (pluginApi?.pluginDir ?? "") + "/progress.lua"
+        _runtimePath("progress.lua")
     readonly property string progressDir:
-        (pluginApi?.pluginDir ?? "") + "/progress"
+        _pathJoin(pluginApi?.pluginDir ?? "", "progress")
 
     // ── Settings ──────────────────────────────────────────────────────────────
     property string currentMode:
@@ -24,16 +40,57 @@ Item {
     property string posterSize: pluginApi?.pluginSettings?.posterSize || "medium"
     property string preferredQuality: pluginApi?.pluginSettings?.preferredQuality || "best"
     property string preferredProvider: pluginApi?.pluginSettings?.preferredProvider || "auto"
+    property var    browseCache: ({})
+    property var    detailCache: ({})
+
+    function _normalisePosterSize(nextPanelSize, nextPosterSize) {
+        if (nextPanelSize === "small" && nextPosterSize === "small")
+            return "medium"
+        return nextPosterSize
+    }
+
+    function _deepClone(value) {
+        if (value === null || value === undefined)
+            return value
+        try {
+            return JSON.parse(JSON.stringify(value))
+        } catch (e) {
+            return value
+        }
+    }
+
+    function _browseCacheKey(args) {
+        return args.join("\u241f")
+    }
+
+    function _detailCacheKey(showId, mode) {
+        return String(showId || "") + "\u241f" + String(mode || "")
+    }
+
+    function _normaliseEpisodeList(episodes) {
+        return (episodes || []).map(function(ep) {
+            return { id: ep.id, number: ep.number }
+        }).sort(function(a, b) {
+            return Number(a.number) - Number(b.number)
+        })
+    }
 
     function setSetting(key, val) {
         if (key === "mode") currentMode = val
-        if (key === "panelSize") panelSize = val
-        if (key === "posterSize") posterSize = val
         if (key === "preferredQuality") preferredQuality = val
         if (key === "preferredProvider") preferredProvider = val
+
+        if (key === "panelSize") {
+            panelSize = val
+            posterSize = _normalisePosterSize(val, posterSize)
+        } else if (key === "posterSize") {
+            posterSize = _normalisePosterSize(panelSize, val)
+        }
         
         if (pluginApi) {
             pluginApi.pluginSettings[key] = val
+            if (key === "panelSize" || key === "posterSize")
+                pluginApi.pluginSettings.posterSize = posterSize
             pluginApi.saveSettings()
         }
     }
@@ -57,8 +114,8 @@ Item {
     property var    animeList:       []
     property bool   isFetchingAnime: false
     property string animeError:      ""
-    property string currentView:     "popular"
-    property string browseFeed:      "popular"
+    property string currentView:     "top"
+    property string browseFeed:      "top"
     property string currentCountry:  "ALL"
     property string currentSearchQuery: ""
     property string currentGenre:    ""
@@ -79,6 +136,7 @@ Item {
     property bool   isFetchingLinks: false
     property string linksError:      ""
     property string currentEpisode:  ""
+    property string detailError:     ""
 
     // ── Currently playing ─────────────────────────────────────────────────────
     property string _playingShowId: ""
@@ -106,6 +164,9 @@ Item {
     property int libraryVersion: 0
 
     Component.onCompleted: {
+        posterSize = _normalisePosterSize(panelSize, posterSize)
+        if (pluginApi && pluginApi.pluginSettings)
+            pluginApi.pluginSettings.posterSize = posterSize
         _loadLibrary()
         _ensureProgressDir()
         fetchGenres()
@@ -295,6 +356,75 @@ Item {
         }
     }
 
+    function markEpisodesThrough(show, epId, epNum, episodeIndex) {
+        if (!show || !show.id) return
+
+        var episodes = show.episodes || []
+        var endIndex = Number(episodeIndex)
+        if (!(endIndex >= 0)) {
+            endIndex = episodes.findIndex(function(ep) {
+                return String(ep.number) === String(epNum)
+            })
+        }
+        if (endIndex < 0) return
+
+        var watchedMap = {}
+        for (var i = 0; i <= endIndex && i < episodes.length; i++)
+            watchedMap[String(episodes[i].number)] = true
+
+        var updated = libraryList.slice()
+        var existingIndex = updated.findIndex(function(entry) { return entry.id === show.id })
+        if (existingIndex === -1) {
+            updated.push(_makeEntry(show, epId, epNum))
+            existingIndex = updated.length - 1
+        }
+
+        var current = updated[existingIndex]
+        var mergedWatched = []
+        var seen = {}
+
+        episodes.forEach(function(ep) {
+            var number = String(ep.number)
+            if (watchedMap[number] || (current.watchedEpisodes || []).indexOf(number) !== -1) {
+                mergedWatched.push(number)
+                seen[number] = true
+            }
+        })
+
+        ;(current.watchedEpisodes || []).forEach(function(number) {
+            number = String(number)
+            if (seen[number]) return
+            mergedWatched.push(number)
+            seen[number] = true
+        })
+
+        var prog = Object.assign({}, current.episodeProgress || {})
+        Object.keys(watchedMap).forEach(function(number) {
+            delete prog[number]
+        })
+
+        updated[existingIndex] = {
+            id: current.id,
+            name: current.name,
+            englishName: current.englishName,
+            nativeName: current.nativeName,
+            thumbnail: current.thumbnail,
+            score: current.score,
+            type: current.type,
+            episodeCount: current.episodeCount,
+            availableEpisodes: current.availableEpisodes,
+            season: current.season,
+            lastWatchedEpId: String(epId || ""),
+            lastWatchedEpNum: String(epNum || ""),
+            watchedEpisodes: mergedWatched,
+            episodeProgress: prog,
+            updatedAt: Date.now()
+        }
+
+        libraryList = updated
+        _saveLibrary()
+    }
+
     function saveEpisodeProgress(showId, epNum, position, duration) {
         var updated = libraryList.map(function(e) {
             if (e.id !== showId) return e
@@ -347,6 +477,47 @@ Item {
             .sort(function(a, b) {
                 return (b.updatedAt || 0) - (a.updatedAt || 0)
             })
+    }
+
+    function getNextUnwatchedEpisode(show) {
+        if (!show || !show.id) return null
+        var episodes = show.episodes || []
+        if (episodes.length === 0) return null
+
+        var entry = getLibraryEntry(show.id)
+        var lastWatchedNum = entry?.lastWatchedEpNum || ""
+
+        if (lastWatchedNum) {
+            var currentIndex = episodes.findIndex(function(ep) {
+                return String(ep.number) === String(lastWatchedNum)
+            })
+
+            if (currentIndex >= 0) {
+                var currentEpisode = episodes[currentIndex]
+                if (!isEpisodeWatched(show.id, currentEpisode.number) ||
+                    hasEpisodeProgress(show.id, currentEpisode.number))
+                    return currentEpisode
+
+                for (var i = currentIndex + 1; i < episodes.length; i++) {
+                    if (!isEpisodeWatched(show.id, episodes[i].number))
+                        return episodes[i]
+                }
+            }
+        }
+
+        for (var j = 0; j < episodes.length; j++) {
+            if (!isEpisodeWatched(show.id, episodes[j].number) ||
+                hasEpisodeProgress(show.id, episodes[j].number))
+                return episodes[j]
+        }
+
+        return episodes[episodes.length - 1] || null
+    }
+
+    function playNextUnwatched(show) {
+        var nextEpisode = getNextUnwatchedEpisode(show)
+        if (!show || !nextEpisode) return
+        fetchStreamLinks(show.id, nextEpisode.id, nextEpisode.number, preferredQuality)
     }
 
     function commitPendingEpisodeSelection() {
@@ -573,6 +744,7 @@ Item {
         id: browseProc
         property string _buf:   ""
         property bool   _reset: true
+        property string _cacheKey: ""
 
         onRunningChanged: {
             if (running) return
@@ -581,9 +753,13 @@ Item {
             try {
                 var d = JSON.parse(_buf)
                 if (d.error) { root.animeError = d.error; _buf = ""; return }
+                root.browseCache[_cacheKey] = root._deepClone({
+                    results: d.results || [],
+                    hasNextPage: d.hasNextPage || false
+                })
                 var results = d.results || []
                 root.animeList = _reset ? results : root.animeList.concat(results)
-                root._hasMore  = d.hasNextPage || false
+                root._hasMore = d.hasNextPage || false
                 root._page++
             } catch(e) { root.animeError = "Parse error: " + e }
             _buf = ""
@@ -603,6 +779,7 @@ Item {
         id: detailProc
         property string _buf:  ""
         property var    _show: null
+        property string _cacheKey: ""
 
         onRunningChanged: {
             if (running) return
@@ -610,17 +787,19 @@ Item {
             if (_buf.length === 0) return
             try {
                 var d = JSON.parse(_buf)
-                if (d.error) { _buf = ""; return }
+                if (d.error) { root.detailError = d.error; _buf = ""; return }
                 if (_show) {
                     var enriched = Object.assign({}, _show)
-                    enriched.episodes = (d.episodes || []).map(function(ep) {
-                        return {id: ep.id, number: ep.number}
-                    })
+                    enriched.episodes = root._normaliseEpisodeList(d.episodes || [])
                     if (d.description) enriched.description = d.description
                     if (d.thumbnail)   enriched.thumbnail   = d.thumbnail
+                    root.detailCache[_cacheKey] = root._deepClone(enriched)
                     root.currentAnime = enriched
                 }
-            } catch(e) { Logger.w("Anime", "detail error:", e) }
+            } catch(e) {
+                root.detailError = "Parse error: " + e
+                Logger.w("Anime", "detail error:", e)
+            }
             _buf = ""
         }
 
@@ -662,8 +841,19 @@ Item {
 
     // ── Internal browse helper ────────────────────────────────────────────────
     function _runBrowse(args, reset) {
+        var cacheKey = _browseCacheKey(args)
+        if (browseCache[cacheKey]) {
+            var cached = _deepClone(browseCache[cacheKey])
+            animeError = ""
+            isFetchingAnime = false
+            animeList = reset ? (cached.results || []) : animeList.concat(cached.results || [])
+            _hasMore = cached.hasNextPage || false
+            _page++
+            return
+        }
         browseProc._buf   = ""
         browseProc._reset = reset
+        browseProc._cacheKey = cacheKey
         browseProc.command = ["python3", scriptPath].concat(args)
         isFetchingAnime = true
         animeError = ""
@@ -677,6 +867,7 @@ Item {
 
     // ── Public API ────────────────────────────────────────────────────────────
     function fetchGenres() {
+        if (genresList.length > 0) return
         genreProc._buf = ""
         genreProc.command = ["python3", scriptPath, "genres"]
         genreProc.running = true
@@ -692,8 +883,8 @@ Item {
     }
 
     function fetchCurrentFeed(reset) {
-        if (browseFeed === "latest")
-            fetchLatest(reset)
+        if (browseFeed === "recent")
+            fetchRecent(reset)
         else
             fetchPopular(reset)
     }
@@ -701,29 +892,29 @@ Item {
     function fetchPopular(reset) {
         if (reset) { _page = 1; _hasMore = true }
         if (!_hasMore || isFetchingAnime) return
-        browseFeed = "popular"
-        currentView = "popular"
+        browseFeed = "top"
+        currentView = "top"
         currentSearchQuery = ""
         var args = ["popular", String(_page), currentMode]
         if (currentGenre) args.push(currentGenre)
         _runBrowse(args, reset || _page === 1)
     }
 
-    function fetchLatest(reset) {
+    function fetchRecent(reset) {
         if (reset) { _page = 1; _hasMore = true }
         if (!_hasMore || isFetchingAnime) return
-        browseFeed = "latest"
-        currentView = "latest"
+        browseFeed = "recent"
+        currentView = "recent"
         currentSearchQuery = ""
-        var args = ["latest", String(_page), currentMode, currentCountry]
+        var args = ["recent", String(_page), currentMode, currentCountry]
         _runBrowse(args, reset || _page === 1)
     }
 
     function fetchNextPage() {
         if (currentView === "search")
             searchAnime(currentSearchQuery, false)
-        else if (browseFeed === "latest")
-            fetchLatest(false)
+        else if (browseFeed === "recent")
+            fetchRecent(false)
         else
             fetchPopular(false)
     }
@@ -740,8 +931,19 @@ Item {
 
     function fetchAnimeDetail(show) {
         currentAnime = show
+        detailError = ""
+        var cacheKey = _detailCacheKey(show?.id, currentMode)
+        if (detailCache[cacheKey]) {
+            var cachedDetail = _deepClone(detailCache[cacheKey])
+            cachedDetail.episodes = _normaliseEpisodeList(cachedDetail.episodes || [])
+            currentAnime = Object.assign({}, show, cachedDetail)
+            isFetchingDetail = false
+            if (detailProc.running) detailProc.running = false
+            return
+        }
         detailProc._buf  = ""
         detailProc._show = show
+        detailProc._cacheKey = cacheKey
         detailProc.command = ["python3", scriptPath, "episodes", show.id, currentMode]
         isFetchingDetail = true
         if (detailProc.running) {

@@ -14,15 +14,14 @@
     "Entertainment"
   ],
   "entryPoints": {
-    "main": "anime/Main.qml",
-    "barWidget": "anime/BarWidget.qml",
-    "panel": "anime/Panel.qml"
+    "main": "Main.qml",
+    "barWidget": "BarWidget.qml",
+    "panel": "Panel.qml"
   },
   "dependencies": {
     "plugins": []
   },
   "metadata": {
-    "runtimeRoot": "anime",
     "defaultSettings": {
       "mode": "sub",
       "preferredQuality": "best",
